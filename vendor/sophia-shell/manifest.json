@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/sophia-org/sophia-stack",
+  "commit": "1209b260d185ca3604586e0ff289f6cbcb4e5a22",
+  "license": "BSD-3-Clause",
+  "files": {
+    "sophia_shell_wire.h": {
+      "source": "bindings/c/sophia_shell_wire.h",
+      "sha256": "0c7bf3237d8748f2825ebe5d98a99e4be8fd932ab9a85558a81aa3781e678e56"
+    },
+    "sophia_shell_catalog.h": {
+      "source": "bindings/c/sophia_shell_catalog.h",
+      "sha256": "c8fc08cdb182790cd4079b357ed52c4cc9a00f36cb61198e0664ee4b147f34fc"
+    },
+    "shell_wire/fields.h": {
+      "source": "bindings/c/shell_wire/fields.h",
+      "sha256": "a174dc7444c7d4c996349b0604bbe098968e8755da3673b23c03be7b41a810f0"
+    },
+    "shell_wire/frame.c": {
+      "source": "bindings/c/shell_wire/frame.c",
+      "sha256": "e7a968c888ee75b61e4a6c740974b736af57c02d50f3646d9e533dcc9ada4085"
+    },
+    "shell_wire/io.c": {
+      "source": "bindings/c/shell_wire/io.c",
+      "sha256": "8bb4ce271d66eaa68f4f5db0c0c91143d56373f9c16d114a4ffc44689a206ffc"
+    },
+    "shell_wire/negotiation.c": {
+      "source": "bindings/c/shell_wire/negotiation.c",
+      "sha256": "78deb952ab2ce5a6b0ce90bec59e025e8f47f4befe74220b1e4a58a5296ab741"
+    },
+    "shell_wire/catalog.c": {
+      "source": "bindings/c/shell_wire/catalog.c",
+      "sha256": "f213a95b2f0af7c55968b080bce4e17af9b36a2def78184f823dfd297db6bf3a"
+    },
+    "tests/sophia_shell_wire_catalog_test.c": {
+      "source": "bindings/c/tests/sophia_shell_wire_catalog_test.c",
+      "sha256": "05fa4afd6ce285c5a651914438bb16dd7ca2033533d51470d65af9aa203c0aa3"
+    },
+    "LICENSE": {
+      "source": "LICENSE",
+      "sha256": "228b91bbd88e49222e09ac364642da29cd39ca2ce1acdc3c91f950948aaee2c5"
+    },
+    "sophia-shell-launcher.frames": {
+      "source": "protocol/golden/sophia-shell-launcher.frames",
+      "sha256": "49a333c7cbb736763b823fdd85759ab230d809bd19fcb62837ee87c68a3a1cc9"
+    }
+  }
+}

@@ -1,3 +1,3 @@
-(A) 2026-09-17 Implement public C client and independent launcher admission integration after Sophia t104-t106 contract/runtime. +native +critical @development id:t002 [plan](docs/notes/plans/b6m2n8cp-native-launcher.md)
+(A) 2026-09-17 Complete public C lifecycle and independent launcher admission integration after Sophia t104-t106; framing/catalog dependency is pinned and tested. +native +critical @development id:t002 [plan](docs/notes/plans/b6m2n8cp-native-launcher.md)
 2026-09-17 Connect catalog-backed bemenu-sophia client, presented input and immutable content upload. +native +critical @development id:t003 depends:t002 [plan](docs/notes/plans/b6m2n8cp-native-launcher.md)
 2026-09-17 Prove two-client isolation and full headless launcher lifecycle, then run separately attended acceptance beside Lom. +native +critical @validation id:t004 depends:t003 [plan](docs/notes/plans/b6m2n8cp-native-launcher.md)

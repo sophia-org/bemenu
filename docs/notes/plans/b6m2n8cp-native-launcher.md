@@ -27,3 +27,23 @@ code; this work adds an optional renderer, not a UI rewrite.
    replacement/failure isolation, logout and resource/latency evidence.
 
 No native install or run follows automatically from the headless gate.
+
+## Implementation progress
+
+Sophia `c7dea19a` introduces the actual shared epoch-store implementation and
+grant-scoped compositor node identity. The existing single-shell transport now
+uses that implementation through its compatibility facade. Session still needs
+multi-component construction and routing; this is not native admission.
+
+This fork pins Sophia's public C sources at `1209b260` in `vendor/sophia-shell`,
+including their BSD license, exact upstream paths and SHA-256 manifest. The
+optional renderer compiles these sources without Rust or a Sophia checkout.
+`make check-sophia` verifies the manifest and runs the independent typed catalog
+reader against the pinned Rust golden frames, alongside the Cairo raster tests.
+The library preserves a committed catalog through an incomplete replacement and
+rejects stale/malformed/replayed data. It supplies display references, never
+permission to execute.
+
+The native constructor deliberately still refuses: revision-7 focused input,
+independent protected admission, content lifecycle and the catalog-backed
+application client are not yet joined. The tests do not establish a live launcher.
