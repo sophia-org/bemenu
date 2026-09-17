@@ -31,6 +31,9 @@ curses: bemenu-renderer-curses.so
 x11: bemenu-renderer-x11.so
 wayland: bemenu-renderer-wayland.so
 
+# Optional native-shell work: does not change the upstream default backends.
+include scripts/sophia.mk
+
 # support non git builds
 .git/index:
 	[ -f .git ] && exit; \

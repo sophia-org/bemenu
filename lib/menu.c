@@ -132,13 +132,19 @@ bm_menu_free(struct bm_menu *menu)
     free(menu);
 }
 
+static void
+free_list_item(void *item)
+{
+    bm_item_free(item);
+}
+
 void
 bm_menu_free_items(struct bm_menu *menu)
 {
     assert(menu);
     list_free_list(&menu->selection);
     list_free_list(&menu->filtered);
-    list_free_items(&menu->items, (list_free_fun)bm_item_free);
+    list_free_items(&menu->items, free_list_item);
 
     if (menu->filter_item)
         free(menu->filter_item);
@@ -791,7 +797,7 @@ bm_menu_set_items(struct bm_menu *menu, const struct bm_item **items, uint32_t n
 {
     assert(menu);
 
-    bool ret = list_set_items(&menu->items, items, nmemb, (list_free_fun)bm_item_free);
+    bool ret = list_set_items(&menu->items, items, nmemb, free_list_item);
 
     if (ret) {
         list_free_list(&menu->selection);

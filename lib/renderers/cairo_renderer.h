@@ -319,7 +319,6 @@ bm_cairo_paint(struct cairo *cairo, uint32_t width, uint32_t max_height, struct 
     uint32_t count;
     struct bm_item **items = bm_menu_get_filtered_items(menu, &count);
     uint32_t lines = (menu->lines > 0 ? menu->lines : 1);
-    uint32_t page_length = 0;
 
     if (menu->lines_mode == BM_LINES_UP && !menu->fixed_height) {
         int32_t new_y_offset = (count < lines ? (lines - count) * height : 0);
@@ -465,7 +464,6 @@ bm_cairo_paint(struct cairo *cairo, uint32_t width, uint32_t max_height, struct 
             posy += (spacing_y ? spacing_y : result.height);
             out_result->height = posy;
             out_result->displayed++;
-            page_length += 1;
         }
 
         if (spacing_x) {

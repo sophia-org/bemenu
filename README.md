@@ -213,3 +213,11 @@ vim binding such as launching a program or pasting.
 * [GNU GPLv3 (or any later version)](LICENSE-CLIENT) for client program[s] and
   other sources except library and bindings
 * [GNU LGPLv3 (or any later version)](LICENSE-LIB) for library and bindings
+# Sophia fork
+
+The optional native-shell port is in progress. `make check-sophia` builds and
+tests its display-independent Cairo/Pango raster. `make sophia` builds the backend
+module, but selecting `BEMENU_BACKEND=sophia` currently refuses startup until
+protocol admission is connected. It does not display a native launcher yet.
+See [the native critical path](docs/notes/plans/b6m2n8cp-native-launcher.md).
+Upstream backends and their default build remain unchanged.

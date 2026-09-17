@@ -1,0 +1,12 @@
+[note]
+language = "en"
+filename = "{{id}}-{{slug title}}"
+extension = "md"
+id-charset = "alphanum"
+id-length = 8
+id-case = "lower"
+exclude = [".artifacts/**", "lib/**", "client/**", "scripts/**", "tests/**"]
+
+[format.markdown]
+link-format = "markdown"
+link-drop-extension = false

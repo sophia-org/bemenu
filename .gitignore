@@ -1,1 +1,10 @@
 result/
+.artifacts/
+/*.a
+/*.so*
+/bemenu
+/bemenu-run
+/bemenu.1
+/bemenu.pc
+
+/.zk/notebook.db*
