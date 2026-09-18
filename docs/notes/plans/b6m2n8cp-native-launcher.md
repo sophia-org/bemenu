@@ -171,3 +171,9 @@ new Opening, including late old Prepared/Presented and a held Released response.
 See [reopening ownership](../concepts/d7w2q8nr-one-connection-native-dispatch.md#reopening-preserves-the-old-owners).
 Server close-to-revoke orchestration and idle cleanup servicing still need the
 live Session join; these supplied-outcome tests do not complete that requirement.
+
+Per-obligation client failure guards now refuse indefinite pending waits while
+preserving owners for disconnect; healthy idle remains unbounded. See the
+[deadline evidence and limits](../concepts/d7w2q8nr-one-connection-native-dispatch.md#pending-obligation-failure-guards).
+These guards do not replace server cancellation/revocation or establish a native
+latency target. The persistent event loop must drive them before physical readiness.

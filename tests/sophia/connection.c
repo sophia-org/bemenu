@@ -261,6 +261,15 @@ static void automatic_allocation_and_upload(unsigned mode)
     assert(memcmp(expected,view.data,bytes));
     struct sophia_shell_frame begin = client_record();
     assert(begin.kind == 165 && begin.transaction == 2);
+    if (mode == 6) {
+        now_msec += BM_SOPHIA_FAILURE_TIMEOUT_MS;
+        assert(bm_sophia_connection_service_at(connection,now_msec++) == SOPHIA_SHELL_IO_ERROR);
+        assert(inspect().timeout == BM_SOPHIA_TIMEOUT_UPLOAD_FIRST);
+        struct sophia_shell_upload_snapshot held;
+        assert(sophia_shell_upload_inspect(connection->upload,0,&held) == 0 && held.state == SOPHIA_UPLOAD_BEGIN_PENDING);
+        assert(connection->views[0].valid);
+        free(expected); teardown(); return;
+    }
     assert(shell_get32(begin.payload+32) == 640 && shell_get32(begin.payload+36) == 320);
     uint8_t key[32]; memcpy(key,begin.payload,sizeof(key));
     uint32_t chunks = shell_get32(begin.payload+52);
@@ -283,6 +292,12 @@ static void automatic_allocation_and_upload(unsigned mode)
     struct sophia_shell_frame demand = client_record();
     assert(demand.kind == 176 && shell_get64(demand.payload+48) == 1);
     uint64_t demand_tx = demand.transaction;
+    if (mode == 8) {
+        now_msec += BM_SOPHIA_FAILURE_TIMEOUT_MS;
+        assert(bm_sophia_connection_service_at(connection,now_msec++) == SOPHIA_SHELL_IO_ERROR);
+        assert(inspect().timeout == BM_SOPHIA_TIMEOUT_PERMIT && connection->demand_pending);
+        free(expected); teardown(); return;
+    }
     assert(connection->demand_pending && !connection->candidate_active && !inspect().native.presented);
     uint8_t permit[64] = {0}; grant(permit); shell_put64(permit+16,2); shell_put64(permit+24,7);
     shell_put64(permit+32,1); shell_put64(permit+40,1); shell_put16(permit+48,1);
@@ -331,6 +346,13 @@ static void automatic_allocation_and_upload(unsigned mode)
     }
     send_frame(175,candidate_tx,outcome,sizeof(outcome)); tick();
     assert(connection->candidate_active && !connection->shown_valid && !inspect().native.presented);
+    if (mode == 7) {
+        now_msec += BM_SOPHIA_FAILURE_TIMEOUT_MS;
+        assert(bm_sophia_connection_service_at(connection,now_msec++) == SOPHIA_SHELL_IO_ERROR);
+        assert(inspect().timeout == BM_SOPHIA_TIMEOUT_CANDIDATE && connection->candidate_active);
+        assert(!inspect().native.presented && connection->views[0].valid);
+        free(expected); teardown(); return;
+    }
     shell_put16(outcome+40,2); shell_put64(outcome+44,10);
     send_frame(175,candidate_tx,outcome,sizeof(outcome)); tick();
     if (mode == 5) {
@@ -431,6 +453,43 @@ static void fractional_allocation_origin(void)
     assert(shell_get64(begin.payload+56) == UINT64_C(1023)*561*4);
     teardown();
 }
+static void failure_deadlines(void)
+{
+    setup();
+    now_msec += BM_SOPHIA_FAILURE_TIMEOUT_MS;
+    assert(bm_sophia_connection_service_at(connection,now_msec++) == SOPHIA_SHELL_IO_ERROR);
+    assert(inspect().timeout == BM_SOPHIA_TIMEOUT_STARTUP && !inspect().welcomed);
+    teardown();
+    setup(); welcome(); limits(); catalog();
+    for (unsigned i = 0; i < 4; ++i) {now_msec += BM_SOPHIA_FAILURE_TIMEOUT_MS; tick();}
+    assert(inspect().timeout == BM_SOPHIA_TIMEOUT_NONE); /* Healthy closed idle is unbounded. */
+    facts(); opening(); assert(client_record().kind == 188);
+    now_msec = connection->deadlines[BM_SOPHIA_TIMEOUT_ALLOCATION].started + BM_SOPHIA_FAILURE_TIMEOUT_MS-1;
+    tick(); /* Immediately before the exact deadline still retains the request. */
+    assert(bm_sophia_connection_service_at(connection,now_msec++) == SOPHIA_SHELL_IO_ERROR);
+    assert(inspect().timeout == BM_SOPHIA_TIMEOUT_ALLOCATION && connection->allocation_pending);
+    uint64_t tx = connection->allocation_transaction;
+    uint8_t answer[160]; allocation_payload(answer); send_frame(164,tx,answer,sizeof(answer));
+    assert(bm_sophia_connection_service_at(connection,now_msec++) == SOPHIA_SHELL_IO_ERROR);
+    assert(connection->allocation_pending && !connection->allocation_valid); /* Terminal is latched. */
+    teardown();
+    setup(); welcome(); limits(); catalog();
+    size_t sizes[] = {64}; struct sophia_shell_outbox_reservation reservation;
+    assert(sophia_shell_outbox_reserve(&connection->outbox,sizes,1,&reservation) == 0);
+    tick(); /* An owned, uncommitted response blocks the FIFO; no kernel saturation claim. */
+    now_msec += BM_SOPHIA_FAILURE_TIMEOUT_MS;
+    assert(bm_sophia_connection_service_at(connection,now_msec++) == SOPHIA_SHELL_IO_ERROR);
+    assert(inspect().timeout == BM_SOPHIA_TIMEOUT_WRITE && connection->outbox.reservation_count == 1);
+    assert(connection->outbox.bytes == 64); teardown();
+    setup(); welcome(); limits(); catalog();
+    assert(send(peers[1],"S",1,MSG_NOSIGNAL) == 1); tick();
+    assert(connection->wire.rx_used == 1);
+    now_msec += BM_SOPHIA_FAILURE_TIMEOUT_MS;
+    assert(bm_sophia_connection_service_at(connection,now_msec++) == SOPHIA_SHELL_IO_ERROR);
+    assert(inspect().timeout == BM_SOPHIA_TIMEOUT_RECEIVE && connection->wire.rx_used == 1);
+    teardown();
+}
+
 static unsigned nibble(char c)
 {
     if (c >= '0' && c <= '9') return c - '0';
@@ -449,9 +508,10 @@ int main(int argc, char **argv)
     }
     fclose(f); assert(found);
     real_menu_input(); bounded_catalog_and_order(); retained_catalog_end();
-    for (unsigned mode = 0; mode < 6; ++mode) automatic_allocation_and_upload(mode);
+    for (unsigned mode = 0; mode < 9; ++mode) automatic_allocation_and_upload(mode);
     allocation_refusal_and_identity();
     fractional_allocation_origin();
+    failure_deadlines();
     puts("bemenu_connection fifo=pass real_menu=pass supplied_presentation=true native=false");
     return 0;
 }

@@ -58,8 +58,17 @@ bm_sophia_connection_service_at(struct bm_sophia_connection *c, uint64_t now)
     if (c->clock_seen && now < c->now_msec)
         return terminal(c, SOPHIA_SHELL_INVALID);
     c->clock_seen = true; c->now_msec = now;
+    int checked = bm_sophia_connection_deadlines(c);
+    if (checked < 0) return terminal(c, checked);
     /* One flush owner and one receive FIFO. Never use wire_queue/flush here. */
+    unsigned count_before = c->outbox.count;
+    size_t sent_before = count_before ? c->outbox.records[c->outbox.head].sent : 0;
     int r = sophia_shell_outbox_flush(&c->outbox, c->fd, 64 * 1024);
+    if (count_before != c->outbox.count || (c->outbox.count &&
+        sent_before != c->outbox.records[c->outbox.head].sent)) {
+        if (c->write_progress == UINT64_MAX) return terminal(c,SOPHIA_SHELL_INVALID);
+        ++c->write_progress;
+    }
     if (r < 0 || r == SOPHIA_SHELL_CLOSED)
         return terminal(c, r);
     size_t remaining = 64 * 1024;
@@ -89,7 +98,9 @@ bm_sophia_connection_service_at(struct bm_sophia_connection *c, uint64_t now)
             break;
     }
     r = bm_sophia_connection_schedule(c);
-    return r < 0 ? terminal(c, r) : r;
+    if (r < 0) return terminal(c, r);
+    checked = bm_sophia_connection_deadlines(c);
+    return checked < 0 ? terminal(c, checked) : r;
 }
 
 bool
@@ -98,7 +109,7 @@ bm_sophia_connection_inspect(const struct bm_sophia_connection *c,
 {
     if (!c || !out) return false;
     struct bm_sophia_connection_snapshot v = {
-        .welcomed = c->welcomed, .content = c->content, .catalog = c->model.generation != 0,
+        .timeout = c->timeout, .welcomed = c->welcomed, .content = c->content, .catalog = c->model.generation != 0,
         .lifecycle = c->native != NULL, .connection_epoch = c->welcome.connection_epoch,
         .catalog_generation = c->model.generation, .facts_generation = c->facts.generation,
         .queued_records = c->outbox.count, .queued_bytes = c->outbox.bytes,

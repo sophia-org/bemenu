@@ -13,7 +13,15 @@ struct bm_sophia_uploaded_view {
 };
 
 /* One serialized owner; neither raw fd nor transport owner escapes publicly. */
+struct bm_sophia_deadline {
+    bool active;
+    uint64_t first, second, started;
+    unsigned phase;
+};
 struct bm_sophia_connection {
+    enum bm_sophia_timeout timeout;
+    uint64_t write_progress;
+    struct bm_sophia_deadline deadlines[BM_SOPHIA_TIMEOUT_COUNT];
     struct bm_menu *menu;
     int fd, terminal;
     struct sophia_shell_wire wire;
@@ -45,6 +53,7 @@ struct bm_sophia_connection {
     uint64_t candidate_transaction;
     bool retire_slot[SOPHIA_SHELL_UPLOAD_SLOTS];
 };
+int bm_sophia_connection_deadlines(struct bm_sophia_connection *c);
 int bm_sophia_connection_receive(struct bm_sophia_connection *c,
                                 const struct sophia_shell_frame *frame);
 int bm_sophia_connection_schedule(struct bm_sophia_connection *c);

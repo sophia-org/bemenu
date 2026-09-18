@@ -181,3 +181,30 @@ Evidence is Sophia `.artifacts/bemenu-reopen-final`. The live Session owner must
 still orchestrate allocation revocation/candidate disposition and keep servicing
 resources while closed. Explicit cancellation races and bounded failure deadlines
 remain open. No socket on the desktop, display/device, or native worker was used.
+
+## Pending-obligation failure guards
+
+The connection now applies a five-second failure guard to startup, allocation,
+permit, candidate, each upload/retirement slot, activation response, allocation
+revocation, retained receive frame and stalled output. The guards observe actual
+owner identities; unrelated incoming records or a different resource do not
+renew an old obligation. Upload chunks share one transfer deadline. Retirement
+is a separate phase. Only actual FIFO write progress renews the write watchdog.
+Healthy negotiated idle time without obligations has no deadline.
+
+A guard failure latches IO_ERROR with a typed timeout reason in the snapshot.
+It leaves the request, response reservation, candidate and immutable pixel owners
+intact. The caller must close the connection before disposal; Session must still
+retire remote consumers independently. This is a bounded failure policy, not a
+latency guarantee or successful cancellation protocol. The caller's event loop
+must continue bounded visits; no background timer/thread was introduced.
+
+Device-hidden evidence at Sophia `.artifacts/bemenu-deadlines-complete` covers
+startup, exact allocation deadline boundary, terminal refusal of a later reply,
+real upload waiting for Begin status, permit wait, Prepared waiting for Presented,
+partial inbound header, and an owned uncommitted FIFO reservation. The latter is
+an output-stall control, not kernel socket backpressure. Each tested timeout
+retains its corresponding owner; repeated healthy idle visits remain valid.
+Activation/revocation guard placement is source coverage here, not an exercised
+native activation or real server revocation timeout. Explicit cancellation races,
+persistent executable startup and live Session orchestration remain open.
