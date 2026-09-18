@@ -55,7 +55,7 @@ checks payload structure only, not lifecycle or authorization.
 
 The menu semantic-input adapter applies the 17 revision-7 commands through the
 existing default Bemenu editing/filtering/navigation implementation. UTF-8,
-control/bidi rejection, 256-byte event and 4096-byte filter limits are checked
+control/bidi rejection, 256-byte event and 256-byte filter limits are checked
 before text is applied. Accept returns a request to the future protocol owner;
 it does not select/execute locally. Vim raw-key mode is refused. The caller still
 must establish current event authority and own ACK/revision/activation state.

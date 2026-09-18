@@ -4,7 +4,7 @@
 #include <string.h>
 
 #define MAX_EVENT_TEXT 256u
-#define MAX_FILTER_BYTES 4096u
+#define MAX_FILTER_BYTES 256u
 
 enum bm_sophia_input_result
 bm_sophia_menu_input(struct bm_menu *menu, uint16_t kind, const uint8_t *text, size_t bytes)
