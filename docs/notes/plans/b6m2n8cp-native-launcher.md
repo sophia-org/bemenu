@@ -95,3 +95,15 @@ corpus runs in `check-sophia`. These functions neither retain pixels nor advance
 resource generations; those duties remain with the client lifecycle owner, along
 with negotiated limits and exact transaction matching. A failed Retire must not
 be mistaken for ResourceReleased.
+
+The published Sophia pin at `8148614707f6219c68f794583a5fd1c048ac626c` supplies
+31 exact source/corpus/license files. ContentLimits/AdmissionRefused and the
+common output/allocation/presentation/permit/action codecs are included, with
+CandidateEnd, demand/cancel and ActionAck encoders. Both additional corpus tests
+run in `check-sophia`; the complete device-hidden project gate passes with
+warnings as errors. Evidence is retained in Sophia's
+`.artifacts/bemenu-feedback-vendor`. The codecs validate wire shapes and coherent
+bounds only. Presented/focus ownership, permit consumption, paired reply enqueue,
+immutable raster retention and exact release/generation reuse still require the
+client state machine. The renderer constructor remains disabled until that join;
+this pin does not establish a usable native launcher or physical-run readiness.

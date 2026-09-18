@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "repository": "https://github.com/sophia-org/sophia-stack",
-  "commit": "d6267e6c8690f90327280c3daf5da161743d8589",
+  "commit": "8148614707f6219c68f794583a5fd1c048ac626c",
   "license": "BSD-3-Clause",
   "files": {
     "sophia_shell_wire.h": {
@@ -95,6 +95,38 @@
     "sophia-shell-content.frames": {
       "source": "protocol/golden/sophia-shell-content.frames",
       "sha256": "eb925c42a16b5e2479bb52e7cc5d601554bded4a1f8dfe1f3d109e04c1675f34"
+    },
+    "sophia_shell_content_limits.h": {
+      "source": "bindings/c/sophia_shell_content_limits.h",
+      "sha256": "d9dbef645deb0bad4b21fbdbee96a3799dd4cde22b71b3caf81e86b080636119"
+    },
+    "sophia_shell_content_feedback.h": {
+      "source": "bindings/c/sophia_shell_content_feedback.h",
+      "sha256": "3125ad72954b1fade36e58eddadd452f46f296595d67604bda276454e5c298c7"
+    },
+    "sophia_shell_content_control.h": {
+      "source": "bindings/c/sophia_shell_content_control.h",
+      "sha256": "7230c226ee3eab8a5bc904879f93bf770a0572bf4fa5686dd8f6413c2f26b6cc"
+    },
+    "shell_wire/content_limits.c": {
+      "source": "bindings/c/shell_wire/content_limits.c",
+      "sha256": "c94d8ae8ebe1fc644b68fb26857e53d6308bfab70e7679fa48a88c4b367c4f5a"
+    },
+    "shell_wire/content_feedback.c": {
+      "source": "bindings/c/shell_wire/content_feedback.c",
+      "sha256": "1b6f6f4179d9b26a93f4d2828138d70e6410a5be2c340e44ae7a5a2a57dec74d"
+    },
+    "shell_wire/content_control.c": {
+      "source": "bindings/c/shell_wire/content_control.c",
+      "sha256": "ea667b60a15081e6af13a5219f48bc998179db609e9e09f6e5dd886ca6aadde0"
+    },
+    "tests/sophia_shell_wire_limits_test.c": {
+      "source": "bindings/c/tests/sophia_shell_wire_limits_test.c",
+      "sha256": "8d88e091ede472846238ecbeff92f6d863eb5ea8a60e4d0b2d400678adc96b6f"
+    },
+    "tests/sophia_shell_wire_feedback_test.c": {
+      "source": "bindings/c/tests/sophia_shell_wire_feedback_test.c",
+      "sha256": "048331b5b76fc7e478d329c7e93b311c149820f5c5a49aa0cc0403c22ce7bc9d"
     }
   }
 }
