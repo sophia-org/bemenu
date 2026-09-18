@@ -303,6 +303,16 @@ static void automatic_allocation_and_upload(unsigned mode)
     shell_put64(permit+32,1); shell_put64(permit+40,1); shell_put16(permit+48,1);
     shell_put32(permit+52,connection->limits.permit_timeout_ms);
     shell_put32(permit+56,connection->limits.max_candidate_bytes);
+    if (mode == 9) {
+        shell_put64(permit+40,0); shell_put16(permit+48,3); shell_put16(permit+50,11);
+        shell_put32(permit+52,0); shell_put32(permit+56,0);
+        send_frame(177,demand_tx,permit,sizeof(permit));
+        uint8_t closed[28] = {0}; grant(closed); shell_put64(closed+16,1); shell_put16(closed+24,11);
+        send_frame(197,90,closed,sizeof(closed)); tick();
+        assert(!connection->demand_pending && !connection->permit_ready && !connection->candidate_active);
+        assert(!inspect().native.open && !inspect().native.presented);
+        free(expected); teardown(); return;
+    }
     if (mode == 1) {
         send_frame(177,demand_tx+1,permit,sizeof(permit));
         assert(bm_sophia_connection_service_at(connection,now_msec++) == SOPHIA_SHELL_INVALID);
@@ -330,6 +340,36 @@ static void automatic_allocation_and_upload(unsigned mode)
     assert(finish.kind == 174 && !inspect().native.presented);
     uint8_t outcome[68] = {0}; grant(outcome); shell_put64(outcome+16,1);
     shell_put64(outcome+24,2); shell_put64(outcome+32,7); shell_put16(outcome+40,1);
+    if (mode >= 10) {
+        if (mode == 12) {
+            shell_put16(permit+48,3); shell_put16(permit+50,11);
+            shell_put32(permit+52,0); shell_put32(permit+56,0); shell_put64(permit+40,2);
+            send_frame(177,demand_tx,permit,sizeof(permit));
+            assert(bm_sophia_connection_service_at(connection,now_msec++) == SOPHIA_SHELL_INVALID);
+            assert(connection->candidate_active && connection->views[0].valid);
+            free(expected); teardown(); return;
+        }
+        shell_put16(permit+48,3); shell_put16(permit+50,11);
+        shell_put32(permit+52,0); shell_put32(permit+56,0);
+        send_frame(177,demand_tx,permit,sizeof(permit));
+        uint8_t closed[28] = {0}; grant(closed); shell_put64(closed+16,1); shell_put16(closed+24,11);
+        send_frame(197,90,closed,sizeof(closed)); tick();
+        assert(connection->candidate_active && connection->views[0].valid);
+        assert(!connection->permit_ready && !inspect().native.open && !inspect().native.presented);
+        assert(sophia_shell_upload_inspect(connection->upload,0,&upload) == 0 && upload.state == SOPHIA_UPLOAD_RESIDENT);
+        if (mode == 11) {
+            send_frame(177,demand_tx,permit,sizeof(permit));
+            assert(bm_sophia_connection_service_at(connection,now_msec++) == SOPHIA_SHELL_INVALID);
+            assert(connection->candidate_active && connection->views[0].valid);
+            free(expected); teardown(); return;
+        }
+        shell_put16(outcome+40,3); shell_put16(outcome+42,11);
+        send_frame(175,candidate_tx,outcome,sizeof(outcome)); tick();
+        assert(!connection->candidate_active && !connection->shown_valid && !inspect().native.presented);
+        /* Rejection permits retirement; only a later resource reply releases. */
+        assert(sophia_shell_upload_inspect(connection->upload,0,&upload) == 0 && upload.state == SOPHIA_UPLOAD_RELEASE_PENDING);
+        free(expected); teardown(); return;
+    }
     if (mode == 4) {
         send_frame(175,candidate_tx+1,outcome,sizeof(outcome));
         assert(bm_sophia_connection_service_at(connection,now_msec++) == SOPHIA_SHELL_INVALID);
@@ -508,7 +548,7 @@ int main(int argc, char **argv)
     }
     fclose(f); assert(found);
     real_menu_input(); bounded_catalog_and_order(); retained_catalog_end();
-    for (unsigned mode = 0; mode < 9; ++mode) automatic_allocation_and_upload(mode);
+    for (unsigned mode = 0; mode < 13; ++mode) automatic_allocation_and_upload(mode);
     allocation_refusal_and_identity();
     fractional_allocation_origin();
     failure_deadlines();

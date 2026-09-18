@@ -238,3 +238,33 @@ and unknown argument refuse; wrong revision and a silent-peer startup timeout
 exit nonzero. This is process/socket/event-loop evidence, not protected admission,
 resource presentation, child application launch or live Session integration.
 Final evidence: Sophia `.artifacts/bemenu-executable-bounded`.
+
+## Cancelled permits preserve candidate ownership
+
+Session may cancel a standing demand (permit ID zero) or a previously granted
+permit while closing. The receiver now accepts those exact terminals, validating
+the original demand transaction, grant, output, demand ID and granted permit ID.
+It consumes the pacing terminal once, rejecting duplicate or wrong permit IDs.
+An expired/cancelled permit after Begin does not reject the candidate locally:
+the immutable view and resource remain resident until its own CandidateOutcome.
+Only then may resource retirement begin, still waiting for exact Released.
+
+Four added connection modes cover standing cancellation followed by Closed,
+cancellation after native Begin followed by a late Cancelled candidate outcome,
+and duplicate/wrong permit IDs. The submitted-race control asserts actual upload
+state remains Resident before rejection and ReleasePending afterward. These
+controls use the real menu/raster/connection with supplied server outcomes.
+They do not prove Session drains late Begin/chunk/end records correctly.
+
+Device-hidden `make check-sophia EXTRA_WARNINGS=-Werror` passes, including the
+private-process executable controls and the 60-file layout check. Evidence is
+retained in Sophia's `.artifacts/bemenu-cancelled-permit-final`. Restoring the old
+receiver in a disposable source copy with the new tests fails on kind 177 during
+the standing cancellation mode (`bemenu-cancelled-permit-baseline`). Initial
+compile evidence used a nonexistent test enum name and is retained separately;
+it is not the passing gate. No live source was mutated for the baseline control.
+
+The Session permit producer also needed transaction correlation repaired:
+Sophia `563ee23b` echoes the demand transaction rather than minting an unrelated
+server transaction. Neither fix completes native Session close/removal/reopen
+or authorizes a physical run. The live join and `lom-test` gate remain pending.

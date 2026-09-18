@@ -16,20 +16,27 @@ int bm_sophia_permit_receive(struct bm_sophia_connection *c, const struct sophia
     int r = sophia_shell_content_feedback_decode(f,&feedback);
     if (r != SOPHIA_SHELL_OK) return r;
     const struct sophia_shell_frame_permit *p = &feedback.value.permit;
-    if (!c->demand_pending || f->transaction != c->demand_transaction ||
+    if ((!c->demand_pending && !c->candidate_active) || f->transaction != c->demand_transaction ||
         feedback.grant.connection_epoch != c->limits.grant.connection_epoch ||
         feedback.grant.content_grant_epoch != c->limits.grant.content_grant_epoch ||
         p->output.id != c->demand.output.id || p->output.generation != c->demand.output.generation ||
         p->demand_id != c->demand.demand_id) return SOPHIA_SHELL_INVALID;
     if (p->state == 1) {
-        if (c->permit_ready || p->permit_id <= c->last_permit || p->ttl_ms > c->limits.permit_timeout_ms ||
+        if (!c->demand_pending || c->permit_ready || p->permit_id <= c->last_permit || p->ttl_ms > c->limits.permit_timeout_ms ||
             p->max_candidate_bytes > c->limits.max_candidate_bytes ||
             c->demand_started > UINT64_MAX-p->ttl_ms) return SOPHIA_SHELL_INVALID;
         c->permit = *p; c->permit_ready = true; c->last_permit = p->permit_id;
     } else {
-        if (p->state != 2 || !c->permit_ready || p->permit_id != c->permit.permit_id)
-            return SOPHIA_SHELL_INVALID;
+        const bool standing = p->state == 3 && c->demand_pending &&
+            !c->permit_ready && !c->candidate_active && p->permit_id == 0;
+        const bool granted = (p->state == 2 || p->state == 3) && p->permit_id &&
+            p->permit_id == c->permit.permit_id && (c->permit_ready || c->candidate_active);
+        if (!standing && !granted) return SOPHIA_SHELL_INVALID;
         c->demand_pending = false; c->permit_ready = false;
+        c->permit.permit_id = 0; /* Consume this exact pacing terminal once. */
+        /* Begin may already be in flight. Its immutable view/resource and
+         * candidate deadline remain owned until the matching candidate outcome;
+         * permit cancellation is not a candidate rejection or pixel release. */
     }
     return SOPHIA_SHELL_OK;
 }

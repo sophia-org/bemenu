@@ -185,3 +185,9 @@ catalog only through Session, never stdin/application paths. No live profile or
 installation was changed. Next critical join is protected Session supervision,
 independent native opening/catalog/focus/content service alongside Lom, exact
 cleanup/cancellation ordering, then the combined offline and physical-run harness.
+
+Cancelled permit reception now preserves in-flight candidate ownership; see
+[the exact terminal controls](../concepts/d7w2q8nr-one-connection-native-dispatch.md#cancelled-permits-preserve-candidate-ownership).
+Standing cancellation and wrong/duplicate grant terminals are covered. Session's
+late-record drain, actual removal/resource settlement and live close/reopen join
+remain required; these supplied-response controls do not mark that path complete.
