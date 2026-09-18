@@ -65,3 +65,50 @@ immutable-upload-to-candidate/resource-retirement join, persistent executable an
 renderer startup, then Session dual-component integration and exact-source gates.
 The renderer constructor remains disabled. See the
 [critical path](../plans/b6m2n8cp-native-launcher.md).
+
+## Automatic allocation and immutable upload
+
+The connection scheduler now starts the actual native allocation request when a
+current Opening has matching OutputFacts. It chooses bounded logical dimensions
+within output extent, popout size, resource bytes and coverage limits. It retains
+the exact request transaction, opening and output facts only after enqueue. A
+refusal is not retried on every visit for unchanged opening/facts. Explicit retry
+and deadline policy still belong to the forthcoming complete controller.
+
+Allocation replies must match grant, transaction, request and output; granted
+geometry must agree with the captured scale/scale generation, have no parent,
+reservation, margins or anchor, and fit the output and negotiated pixel bounds.
+Pixel endpoints are checked independently against scaled logical endpoints. A
+fractional origin can add a pixel beyond ceil(extent), so the request calculation
+reserves that slack before choosing its dimensions and byte budget. This uses
+the existing raster profile (scale 1 through 4), not a claim of arbitrary scale
+support. Contradictory replies terminate before raster construction or upload.
+
+On a current grant the scheduler paints the actual catalog view and hands its
+pixels to the immutable upload owner. It copies the view's opening, state/catalog
+revision, output-facts generation and allocation identity, and removes the borrowed
+pixel pointer from the retained metadata. A subsequent mutable Cairo repaint
+cannot change that upload. One resource record is queued per visit, using the
+shared transaction source/FIFO; unchanged state does not create another upload.
+No rendering/upload starts while the opening is closed or closing. Existing
+allocation/resources remain retained; close/reopen, replacement and retirement
+scheduling still need the full controller join.
+
+Device-hidden `check-sophia` evidence is at Sophia's
+`.artifacts/bemenu-auto-upload-final`. A private peer observes the actual request,
+supplies a matching allocation and resource statuses, then compares every uploaded
+chunk against the real prior Cairo image after repainting that image differently.
+It reaches Resident without a hand-created resource or candidate. Seven mismatched
+allocation variants refuse without a raster/upload, unchanged refusal does not
+produce a request storm, and fractional 7/4 geometry produces the expected
+1023-by-561 raster. Four compiled negatives remove transaction matching, bypass
+geometry validation, omit fractional slack and retry unchanged refused requests;
+each fails behaviorally. Restored source and a restored positive gate are retained.
+An earlier fixture incorrectly put a chunk ordinal in the final status; that
+separate failed attempt was fixed to the protocol's zero field.
+
+This slice does not acquire a frame permit, submit a native candidate, select
+final hit targets or present the uploaded pixels. Those steps, resource cleanup
+across replacement/close, deadlines, application startup and live Session wiring
+remain required. The previous fixture's supplied Presented facts are not relabelled
+as evidence for this automatic upload path.

@@ -21,7 +21,8 @@ struct bm_sophia_connection_snapshot {
 int bm_sophia_connection_new(struct bm_menu *menu, int fd,
                             struct bm_sophia_connection **out);
 /* One serialized visit: at most 16 complete records, 64 KiB read and 64 KiB
- * written, each underlying I/O call also syscall-bounded. Retains a BUSY input
+ * written, each underlying I/O call also syscall-bounded. May capture one bounded
+ * CPU raster and enqueue one resource record after input dispatch. Retains a BUSY input
  * frame in place; subsequent frames cannot pass it. Caller owns polling,
  * monotonic deadlines and termination on a terminal result. */
 int bm_sophia_connection_service(struct bm_sophia_connection *connection);

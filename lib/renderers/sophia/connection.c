@@ -74,7 +74,8 @@ bm_sophia_connection_service(struct bm_sophia_connection *c)
         if (!remaining)
             break;
     }
-    return SOPHIA_SHELL_AGAIN;
+    r = bm_sophia_connection_schedule(c);
+    return r < 0 ? terminal(c, r) : r;
 }
 
 bool
@@ -100,6 +101,7 @@ bm_sophia_connection_dispose(struct bm_sophia_connection *c)
     sophia_shell_native_lifecycle_dispose(c->native);
     sophia_shell_upload_dispose(c->upload);
     sophia_shell_outbox_dispose(&c->outbox);
+    bm_sophia_raster_free(c->raster);
     /* No replacement of externally modified menu ownership. Such modification
      * violates this connection's borrowing contract; never free foreign items. */
     bm_sophia_catalog_clear(&c->model);

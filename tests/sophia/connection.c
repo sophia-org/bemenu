@@ -206,6 +206,119 @@ static void retained_catalog_end(void)
     assert(bm_sophia_connection_service(connection) == SOPHIA_SHELL_INVALID && !inspect().content);
     teardown();
 }
+static struct sophia_shell_frame client_record(void)
+{
+    static uint8_t bytes[SOPHIA_SHELL_MAX_FRAME_BYTES];
+    size_t used = 0, need = 24;
+    for (unsigned turn = 0; turn < 200; ++turn) {
+        tick();
+        ssize_t n = recv(peers[1], bytes+used, need-used, MSG_DONTWAIT);
+        if (n < 0) {assert(errno == EAGAIN || errno == EWOULDBLOCK); continue;}
+        assert(n > 0); used += n;
+        if (used == 24) {need = 24 + shell_get32(bytes+16); assert(need <= sizeof(bytes));}
+        if (used == need) {
+            struct sophia_shell_frame f;
+            assert(sophia_shell_frame_decode(bytes,used,&f) == 0); return f;
+        }
+    }
+    abort();
+}
+static void facts_scaled(unsigned n, unsigned d)
+{
+    uint8_t p[72] = {0}; grant(p); shell_put64(p+16,1); shell_put32(p+24,1);
+    shell_put64(p+32,2); shell_put64(p+40,7); shell_put32(p+48,1280); shell_put32(p+52,720);
+    shell_put32(p+56,n); shell_put32(p+60,d); shell_put64(p+64,1); send_frame(162,70,p,sizeof(p)); tick();
+}
+static void facts(void) {facts_scaled(1,1);}
+static void allocation_payload(uint8_t *p)
+{
+    memset(p,0,160); grant(p); shell_put64(p+16,1); shell_put16(p+24,1);
+    shell_put64(p+32,2); shell_put64(p+40,7); shell_put64(p+48,4); shell_put64(p+56,1);
+    shell_put64(p+80,1); shell_put32(p+96,640); shell_put32(p+100,320);
+    shell_put32(p+112,640); shell_put32(p+116,320); shell_put32(p+120,1); shell_put32(p+124,1);
+}
+static void automatic_allocation_and_upload(void)
+{
+    setup(); welcome(); limits(); catalog(); facts(); opening();
+    struct sophia_shell_frame request = client_record();
+    assert(request.kind == 188 && request.transaction == 1 && connection->allocation_pending);
+    assert(shell_get64(request.payload+16) == 1 && shell_get64(request.payload+24) == 2 &&
+           shell_get64(request.payload+32) == 7 && shell_get32(request.payload+68) == 640 && shell_get32(request.payload+72) == 320);
+    uint8_t p[160]; allocation_payload(p);
+    send_frame(164,1,p,sizeof(p)); tick();
+    assert(connection->allocation_valid && !connection->allocation_pending && connection->views[0].valid);
+    assert(!connection->views[0].view.data && connection->views[0].revision == 1 && connection->views[0].view.selected == 7);
+    struct bm_sophia_view view; assert(bm_sophia_view_capture(connection->raster,&connection->model,&view));
+    size_t bytes = (size_t)view.stride*view.height;
+    uint8_t *expected = malloc(bytes); assert(expected); memcpy(expected,view.data,bytes);
+    /* Repainting the same mutable Cairo image cannot change the staged upload. */
+    assert(bm_menu_set_color(menu,BM_COLOR_FILTER_BG,"#AABBCC"));
+    assert(bm_sophia_view_capture(connection->raster,&connection->model,&view));
+    assert(memcmp(expected,view.data,bytes));
+    struct sophia_shell_frame begin = client_record();
+    assert(begin.kind == 165 && begin.transaction == 2);
+    assert(shell_get32(begin.payload+32) == 640 && shell_get32(begin.payload+36) == 320);
+    uint8_t key[32]; memcpy(key,begin.payload,sizeof(key));
+    uint32_t chunks = shell_get32(begin.payload+52);
+    assert(shell_get64(begin.payload+56) == bytes);
+    uint8_t status[48] = {0}; memcpy(status,key,sizeof(key)); shell_put16(status+32,1); shell_put64(status+40,bytes);
+    send_frame(166,begin.transaction,status,sizeof(status)); tick();
+    size_t copied = 0;
+    for (unsigned ordinal = 0; ordinal < chunks; ++ordinal) {
+        struct sophia_shell_frame chunk = client_record();
+        assert(chunk.kind == 167 && !memcmp(chunk.payload,key,sizeof(key)) && shell_get32(chunk.payload+32) == ordinal);
+        size_t size = shell_get32(chunk.payload+36);
+        assert(shell_get64(chunk.payload+40) == copied && copied+size <= bytes);
+        assert(!memcmp(chunk.payload+48,expected+copied,size)); copied += size;
+    }
+    struct sophia_shell_frame end = client_record();
+    assert(end.kind == 168 && copied == bytes && shell_get64(end.payload+32) == bytes);
+    shell_put16(status+32,2); send_frame(166,end.transaction,status,sizeof(status)); tick();
+    struct sophia_shell_upload_snapshot upload;
+    assert(sophia_shell_upload_inspect(connection->upload,0,&upload) == 0 && upload.state == SOPHIA_UPLOAD_RESIDENT);
+    tick(); assert(!connection->outbox.count); /* No duplicate render/Begin for this revision. */
+    free(expected); teardown();
+}
+static void allocation_refusal_and_identity(void)
+{
+    for (unsigned bad = 0; bad < 7; ++bad) {
+        setup(); welcome(); limits(); catalog(); facts(); opening();
+        assert(client_record().kind == 188);
+        uint8_t p[160]; allocation_payload(p); uint64_t tx = 1;
+        unsigned words[] = {0,16,40,80};
+        if (bad < 4) shell_put64(p+words[bad],shell_get64(p+words[bad])+1);
+        else if (bad == 4) shell_put32(p+112,641);
+        else if (bad == 5) shell_put32(p+128,1);
+        else tx = 2;
+        send_frame(164,tx,p,sizeof(p));
+        assert(bm_sophia_connection_service(connection) == SOPHIA_SHELL_INVALID);
+        assert(connection->allocation_pending && !connection->allocation_valid && !connection->raster);
+        assert(connection->allocation_counter == 1 && !connection->views[0].valid && !connection->outbox.count);
+        teardown();
+    }
+    setup(); welcome(); limits(); catalog(); facts(); opening(); assert(client_record().kind == 188);
+    uint8_t p[160] = {0}; grant(p); shell_put64(p+16,1); shell_put16(p+24,2); shell_put16(p+26,2);
+    shell_put64(p+32,2); shell_put64(p+40,7); send_frame(164,1,p,sizeof(p)); tick();
+    for (unsigned i = 0; i < 3; ++i) tick();
+    assert(!connection->allocation_pending && !connection->allocation_valid && !connection->outbox.count);
+    assert(connection->allocation_counter == 1); /* No retry storm for unchanged opening/facts. */
+    teardown();
+}
+static void fractional_allocation_origin(void)
+{
+    setup(); welcome(); limits(); catalog(); facts_scaled(7,4); opening();
+    struct sophia_shell_frame request = client_record();
+    assert(request.kind == 188 && shell_get32(request.payload+68) == 584 && shell_get32(request.payload+72) == 320);
+    uint8_t p[160]; allocation_payload(p);
+    shell_put32(p+88,1); shell_put32(p+92,1); shell_put32(p+96,584);
+    shell_put32(p+104,1); shell_put32(p+108,1); shell_put32(p+112,1023); shell_put32(p+116,561);
+    shell_put32(p+120,7); shell_put32(p+124,4); send_frame(164,1,p,sizeof(p)); tick();
+    assert(connection->allocation_valid && connection->views[0].valid);
+    struct sophia_shell_frame begin = client_record();
+    assert(begin.kind == 165 && shell_get32(begin.payload+32) == 1023 && shell_get32(begin.payload+36) == 561);
+    assert(shell_get64(begin.payload+56) == UINT64_C(1023)*561*4);
+    teardown();
+}
 static unsigned nibble(char c)
 {
     if (c >= '0' && c <= '9') return c - '0';
@@ -223,7 +336,9 @@ int main(int argc, char **argv)
         found = true; break;
     }
     fclose(f); assert(found);
-    real_menu_input(); bounded_catalog_and_order(); retained_catalog_end();
+    real_menu_input(); bounded_catalog_and_order(); retained_catalog_end(); automatic_allocation_and_upload();
+    allocation_refusal_and_identity();
+    fractional_allocation_origin();
     puts("bemenu_connection fifo=pass real_menu=pass supplied_presentation=true native=false");
     return 0;
 }

@@ -4,6 +4,13 @@
 #include "view.h"
 #include "../../../vendor/sophia-shell/sophia_shell_upload.h"
 
+struct bm_sophia_uploaded_view {
+    bool valid;
+    uint64_t opening, revision, facts_generation;
+    struct sophia_shell_content_id allocation;
+    struct bm_sophia_view view;
+};
+
 /* One serialized owner; neither raw fd nor transport owner escapes publicly. */
 struct bm_sophia_connection {
     struct bm_menu *menu;
@@ -21,7 +28,22 @@ struct bm_sophia_connection {
     struct sophia_shell_output_facts facts;
     uint64_t next_transaction;
     bool welcomed, content, catalog_pending;
+    uint64_t allocation_counter, allocation_transaction, allocation_opening;
+    uint64_t allocation_attempt_opening, allocation_attempt_facts;
+    struct sophia_shell_native_allocation allocation_request;
+    struct sophia_shell_output_fact allocation_fact;
+    struct sophia_shell_allocation_result allocation;
+    bool allocation_pending, allocation_valid;
+    struct bm_sophia_raster *raster;
+    struct bm_sophia_uploaded_view views[SOPHIA_SHELL_UPLOAD_SLOTS];
 };
 int bm_sophia_connection_receive(struct bm_sophia_connection *c,
                                 const struct sophia_shell_frame *frame);
+int bm_sophia_connection_schedule(struct bm_sophia_connection *c);
+int bm_sophia_allocation_service(struct bm_sophia_connection *c,
+                                const struct sophia_shell_native_lifecycle_snapshot *state);
+int bm_sophia_allocation_receive(struct bm_sophia_connection *c,
+                                const struct sophia_shell_frame *frame);
+bool bm_sophia_allocation_current(const struct bm_sophia_connection *c,
+                                 const struct sophia_shell_native_lifecycle_snapshot *state);
 #endif

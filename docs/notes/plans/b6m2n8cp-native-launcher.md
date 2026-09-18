@@ -35,7 +35,7 @@ grant-scoped compositor node identity. The existing single-shell transport now
 uses that implementation through its compatibility facade. Session still needs
 multi-component construction and routing; this is not native admission.
 
-This fork pins Sophia's public C sources at `2c2f90f9bc6267ff7d70885bc0d6c1dd98e8e8ed` in `vendor/sophia-shell`,
+This fork pins Sophia's public C sources at `c2ff3fcdaf8eb0b57872bc5b7a879d854a44cc36` in `vendor/sophia-shell`,
 including their BSD license, exact upstream paths and SHA-256 manifest. The
 optional renderer compiles these sources without Rust or a Sophia checkout.
 `make check-sophia` verifies the manifest and runs the independent typed catalog
@@ -142,3 +142,12 @@ input-response transfer retain the borrowed frame without replaying completed
 effects. Automatic allocation/render/upload/permit scheduling, final target policy,
 application deadlines/executable startup and Session live integration remain open.
 This is progress on t003, not physical-run readiness or completed t002/t003.
+
+
+Automatic native allocation and real raster/resource upload now run through the
+connection scheduler; [the connection record](../concepts/d7w2q8nr-one-connection-native-dispatch.md#automatic-allocation-and-immutable-upload)
+retains bounds, origin identity, fractional rounding and private-socket evidence.
+The next client join is frame permits and exact candidate submission, followed by
+replacement/close resource scheduling and deadlines. Final hit-target policy and
+persistent application startup remain incomplete. Resident bytes in a supplied
+private peer do not establish native presentation or `lom-test` readiness.

@@ -92,6 +92,8 @@ bm_sophia_connection_receive(struct bm_sophia_connection *c, const struct sophia
     }
     if (f->kind == 166 || f->kind == 171)
         return sophia_shell_upload_reply(c->upload, f);
+    if (f->kind == 164)
+        return bm_sophia_allocation_receive(c, f);
     if (!c->native) return SOPHIA_SHELL_INVALID;
     return sophia_shell_native_lifecycle_receive(c->native, f, &c->next_transaction,
                                                 bm_sophia_view_edit, c->menu);
