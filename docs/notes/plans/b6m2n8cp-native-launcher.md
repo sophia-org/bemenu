@@ -158,3 +158,10 @@ until exact Released. See the [frame scheduling record](../concepts/d7w2q8nr-one
 The device-hidden peer supplies server outcomes; this is not live Session or
 native acceptance. Final target geometry, permit cancellation/deadline races,
 allocation reopen/replacement and executable/live supervision remain required.
+
+Decoration-aware target interiors now exclude observed overlays and borders;
+[the painted-view note](../concepts/g8p2m4vr-painted-catalog-views.md#decoration-aware-native-target-interiors)
+records conservative rectangular semantics and actual pixel checks. This closes
+the previously explicit raw-background target gap for the current painter.
+Cancellation/expiry, reopen/topology and deadlines still require controller work,
+followed by executable and live Session integration before `lom-test` readiness.

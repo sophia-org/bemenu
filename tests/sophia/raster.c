@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <math.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 static struct bm_menu *
@@ -110,6 +111,70 @@ painted_rows(void)
     assert(raster && !bm_sophia_raster_paint(raster, menu, &pixels));
     assert(!pixels.data && !pixels.row_count); /* No silently truncated target set. */
     bm_sophia_raster_free(raster); bm_menu_free(menu);
+}
+
+static void
+decorated_targets(void)
+{
+    for (unsigned mode = 0; mode < 4; ++mode) {
+        struct bm_menu *menu = fixture();
+        assert(bm_menu_set_color(menu,BM_COLOR_ITEM_BG,"#113355"));
+        assert(bm_menu_set_color(menu,BM_COLOR_ITEM_FG,"#113355"));
+        assert(bm_menu_set_color(menu,BM_COLOR_ALTERNATE_BG,"#224466"));
+        assert(bm_menu_set_color(menu,BM_COLOR_ALTERNATE_FG,"#224466"));
+        assert(bm_menu_set_color(menu,BM_COLOR_HIGHLIGHTED_BG,"#335577"));
+        assert(bm_menu_set_color(menu,BM_COLOR_HIGHLIGHTED_FG,"#335577"));
+        assert(bm_menu_set_color(menu,BM_COLOR_BORDER,"#FF0000"));
+        assert(bm_menu_set_color(menu,BM_COLOR_SCROLLBAR_BG,"#00FF00"));
+        assert(bm_menu_set_color(menu,BM_COLOR_SCROLLBAR_FG,"#0000FF"));
+        menu->counter = true;
+        if (mode == 0) {
+            bm_menu_set_lines(menu,0);
+            struct bm_item *first = bm_menu_get_highlighted_item(menu);
+            assert(bm_item_set_text(first,"A very long row that extends under both the right arrow and the counter decoration"));
+        } else if (mode == 1) {
+            bm_menu_set_lines_mode(menu,BM_LINES_UP);
+        } else if (mode == 2) {
+            bm_menu_set_lines(menu,2); menu->scrollbar = BM_SCROLLBAR_ALWAYS;
+            menu->spacing = true; assert(bm_menu_set_title(menu,"Launcher"));
+        } else {
+            menu->border_size = 2.5; menu->border_radius = 24;
+        }
+        double scale = mode == 3 ? 1.25 : 1;
+        struct bm_sophia_raster *raster = bm_sophia_raster_new(400,320,scale);
+        struct bm_sophia_pixels pixels;
+        assert(raster && bm_sophia_raster_paint(raster,menu,&pixels) && pixels.row_count);
+        uint32_t count;
+        struct bm_item **items = bm_menu_get_filtered_items(menu,&count);
+        for (unsigned i = 0; i < pixels.row_count; ++i) {
+            const struct bm_sophia_painted_row *row = &pixels.rows[i];
+            unsigned index = 0;
+            while (index < count && items[index] != row->item) ++index;
+            assert(index < count && row->width && row->height);
+            enum bm_color color = row->item == bm_menu_get_highlighted_item(menu) ? BM_COLOR_HIGHLIGHTED_BG :
+                (mode == 1 ? i : index) % 2 ? BM_COLOR_ALTERNATE_BG : BM_COLOR_ITEM_BG;
+            /* All text matches its row background. Every authorized pixel must
+             * therefore remain that row, never a border, counter or scrollbar. */
+            for (unsigned y = row->y; y < row->y+row->height; ++y)
+                for (unsigned x = row->x; x < row->x+row->width; ++x) {
+                    const unsigned char *pixel = pixels.data+y*pixels.stride+4*x;
+                    if (pixel[0] != menu->colors[color].g || pixel[1] != menu->colors[color].b ||
+                        pixel[2] != menu->colors[color].r || pixel[3] != 255)
+                        fprintf(stderr,"target mode=%u row=%u xy=%u,%u bounds=%u,%u,%u,%u pixel=%u,%u,%u,%u\n",
+                            mode,index,x,y,row->x,row->y,row->width,row->height,pixel[0],pixel[1],pixel[2],pixel[3]);
+                    assert(pixel[0] == menu->colors[color].g && pixel[1] == menu->colors[color].b &&
+                        pixel[2] == menu->colors[color].r && pixel[3] == 255);
+                }
+        }
+        struct cairo ordinary = {.scale = scale,.antialiasing = true};
+        cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,pixels.width,pixels.height);
+        assert(bm_cairo_create_for_surface(&ordinary,surface));
+        struct cairo_paint_result result;
+        bm_cairo_paint(&ordinary,pixels.width,pixels.height,menu,&result);
+        cairo_surface_flush(surface);
+        assert(!memcmp(pixels.data,cairo_image_surface_get_data(surface),(size_t)pixels.stride*pixels.height));
+        bm_cairo_destroy(&ordinary); bm_sophia_raster_free(raster); bm_menu_free(menu);
+    }
 }
 
 static void
@@ -252,6 +317,7 @@ main(void)
     assert(!bm_menu_new("sophia"));
     semantic_input();
     painted_rows();
+    decorated_targets();
     menu_behavior();
     scale_and_bounds();
     return 0;

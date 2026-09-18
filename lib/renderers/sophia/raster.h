@@ -20,9 +20,9 @@ struct bm_sophia_painted_row {
 struct bm_sophia_pixels {
     const unsigned char *data;
     uint32_t width, height, stride, content_height, displayed;
-    /* Physical clipped background rectangles observed during the actual paint,
-     * not reconstructed from row count. Later painter decorations may overlay
-     * these backgrounds; this alone is not a native target authorization. */
+    /* Inward-rounded row interiors, excluding later observed decorations and
+     * border/corner bounds. One conservative uncovered rectangle per row.
+     * Catalog/view binding still supplies native input authority. */
     uint32_t row_count;
     struct bm_sophia_painted_row rows[32];
 };

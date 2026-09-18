@@ -56,7 +56,15 @@ struct cairo_result {
 struct cairo_row_observer {
     void (*row)(void *user, const struct bm_item *item, const struct cairo_result *box);
     void *user;
+    void (*cover)(void *user, const struct cairo_result *box);
+    void (*clip)(void *user, const struct cairo_result *box);
 };
+
+static inline void
+bm_cairo_observe_cover(const struct cairo_row_observer *observer, const struct cairo_result *box)
+{
+    if (observer && observer->cover) observer->cover(observer->user, box);
+}
 
 struct cairo_paint_result {
     uint32_t displayed;
@@ -485,6 +493,9 @@ bm_cairo_paint_observed(struct cairo *cairo, uint32_t width, uint32_t max_height
             bm_cairo_color_from_menu_color(menu, BM_COLOR_ITEM_BG, &paint.bg);
             const uint32_t sheight = out_result->height - titleh;
             cairo_set_source_rgba(cairo->cr, paint.bg.r, paint.bg.b, paint.bg.g, paint.bg.a);
+            struct cairo_result cover = {.x = scrollbar_w + border_size, .y = titleh + border_size,
+                .width = spacing_x - scrollbar_w, .box_height = sheight};
+            bm_cairo_observe_cover(observer, &cover);
             cairo_rectangle(cairo->cr, scrollbar_w + border_size, titleh + border_size, spacing_x - scrollbar_w, sheight);
             cairo_fill(cairo->cr);
         }
@@ -495,6 +506,9 @@ bm_cairo_paint_observed(struct cairo *cairo, uint32_t width, uint32_t max_height
 
             const uint32_t sheight = out_result->height - titleh;
             cairo_set_source_rgba(cairo->cr, paint.bg.r, paint.bg.b, paint.bg.g, paint.bg.a);
+            struct cairo_result cover = {.x = border_size, .y = titleh + border_size,
+                .width = scrollbar_w, .box_height = sheight};
+            bm_cairo_observe_cover(observer, &cover);
             cairo_rectangle(cairo->cr, border_size, titleh + border_size, scrollbar_w, sheight);
             cairo_fill(cairo->cr);
 
@@ -552,6 +566,7 @@ bm_cairo_paint_observed(struct cairo *cairo, uint32_t width, uint32_t max_height
             paint.pos = (struct pos){ width/cairo->scale - result.x_advance - 2, vpadding + border_size };
             paint.box = (struct box){ 1, 2, vpadding, -vpadding, 0, height };
             bm_cairo_draw_line(cairo, &paint, &result, ">");
+            bm_cairo_observe_cover(observer, &result);
         }
 
     }
@@ -564,6 +579,7 @@ bm_cairo_paint_observed(struct cairo *cairo, uint32_t width, uint32_t max_height
             paint.pos = (struct pos){ border_size + 4, posy + vpadding + border_size };
             paint.box = (struct box){ 4, 16, vpadding, -vpadding, 0, height };
             bm_cairo_draw_line(cairo, &paint, &result, "%s", menu->title);
+            bm_cairo_observe_cover(observer, &result);
         }
 
         bm_cairo_color_from_menu_color(menu, BM_COLOR_FILTER_FG, &paint.fg);
@@ -589,6 +605,7 @@ bm_cairo_paint_observed(struct cairo *cairo, uint32_t width, uint32_t max_height
             bm_cairo_draw_line(cairo, &paint, &result, "%s", filter_text);
         }
 
+        bm_cairo_observe_cover(observer, &result);
         paint.draw_cursor = false;
 
         posy += (spacing_y ? spacing_y : result.height);
@@ -606,6 +623,7 @@ bm_cairo_paint_observed(struct cairo *cairo, uint32_t width, uint32_t max_height
         paint.pos = (struct pos){ width/cairo->scale - result.x_advance - 10, vpadding + border_size };
         paint.box = (struct box){ 1, 2, vpadding, -vpadding, 0, height };
         bm_cairo_draw_line(cairo, &paint, &result, "%s", counter);
+        bm_cairo_observe_cover(observer, &result);
     }
 
     // Draw borders
@@ -619,6 +637,20 @@ bm_cairo_paint_observed(struct cairo *cairo, uint32_t width, uint32_t max_height
     cairo_set_line_width(cairo->cr, 2 * menu->border_size);
 
     cairo_stroke(cairo->cr);
+
+    if (observer && observer->clip) {
+        /* A conservative rectangular interior of the actual border path.
+         * Rounded corner wings remain painted but are not clickable. */
+        double inset = border_radius ? 1 : 0;
+        double outer_width = (width + border_size) / cairo->scale - 2 * inset;
+        double outer_height = total_height - 2 * inset;
+        double radius = border_radius ? fmin(border_radius, fmin(outer_width, outer_height) * 0.5) : 0;
+        double side = fmax(radius, border_size);
+        struct cairo_result interior = {.x = inset + side, .y = inset + border_size,
+            .width = fmax(0, outer_width - 2 * side),
+            .box_height = fmax(0, outer_height - 2 * border_size)};
+        observer->clip(observer->user, &interior);
+    }
 
     out_result->height += 2 * border_size;
     out_result->height *= cairo->scale;

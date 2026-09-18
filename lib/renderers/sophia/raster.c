@@ -19,16 +19,70 @@ struct row_capture {
     bool overflow;
 };
 
+/* Keep one rectangular target per catalog row. If decoration splits a row,
+ * retain its largest uncovered rectangle rather than authorizing covered pixels. */
+static void
+capture_cover(void *data, const struct cairo_result *box)
+{
+    struct row_capture *capture = data;
+    struct bm_sophia_pixels *pixels = capture->pixels;
+    double x = fmax(0, floor(box->x * capture->scale));
+    double y = fmax(0, floor(box->y * capture->scale));
+    double right = fmin(pixels->width, ceil((box->x + box->width) * capture->scale));
+    double bottom = fmin(pixels->height, ceil((box->y + box->box_height) * capture->scale));
+    if (right <= x || bottom <= y) return;
+    for (unsigned i = 0; i < pixels->row_count; ++i) {
+        struct bm_sophia_painted_row *row = &pixels->rows[i];
+        uint32_t rx = row->x + row->width, by = row->y + row->height;
+        uint32_t left = fmax(row->x, x), top = fmax(row->y, y);
+        uint32_t end = fmin(rx, right), foot = fmin(by, bottom);
+        if (end <= left || foot <= top) continue;
+        struct bm_sophia_painted_row choices[4] = {
+            {row->item,row->x,row->y,left-row->x,row->height},
+            {row->item,end,row->y,rx-end,row->height},
+            {row->item,row->x,row->y,row->width,top-row->y},
+            {row->item,row->x,foot,row->width,by-foot},
+        };
+        unsigned best = 0;
+        for (unsigned j = 1; j < 4; ++j)
+            if ((uint64_t)choices[j].width*choices[j].height > (uint64_t)choices[best].width*choices[best].height)
+                best = j;
+        *row = choices[best];
+    }
+}
+
+static void
+capture_clip(void *data, const struct cairo_result *box)
+{
+    struct row_capture *capture = data;
+    struct bm_sophia_pixels *pixels = capture->pixels;
+    double x = fmax(0, ceil(box->x * capture->scale));
+    double y = fmax(0, ceil(box->y * capture->scale));
+    double right = fmin(pixels->width, floor((box->x + box->width) * capture->scale));
+    double bottom = fmin(pixels->height, floor((box->y + box->box_height) * capture->scale));
+    unsigned count = 0;
+    for (unsigned i = 0; i < pixels->row_count; ++i) {
+        struct bm_sophia_painted_row row = pixels->rows[i];
+        double left = fmax(row.x,x), top = fmax(row.y,y);
+        double end = fmin(row.x+row.width,right), foot = fmin(row.y+row.height,bottom);
+        if (end <= left || foot <= top) continue;
+        pixels->rows[count++] = (struct bm_sophia_painted_row){row.item,left,top,end-left,foot-top};
+    }
+    pixels->row_count = count;
+}
+
 static void
 capture_row(void *data, const struct bm_item *item, const struct cairo_result *box)
 {
     struct row_capture *capture = data;
     struct bm_sophia_pixels *pixels = capture->pixels;
-    /* Round endpoints independently, then intersect with the physical image. */
-    double x = fmax(0, floor(box->x * capture->scale));
-    double y = fmax(0, floor(box->y * capture->scale));
-    double right = fmin(pixels->width, ceil((box->x + box->width) * capture->scale));
-    double bottom = fmin(pixels->height, ceil((box->y + box->box_height) * capture->scale));
+    /* Later row backgrounds occlude older horizontal/vertical targets too. */
+    capture_cover(data, box);
+    /* Only fully covered physical pixels authorize input; round inward. */
+    double x = fmax(0, ceil(box->x * capture->scale));
+    double y = fmax(0, ceil(box->y * capture->scale));
+    double right = fmin(pixels->width, floor((box->x + box->width) * capture->scale));
+    double bottom = fmin(pixels->height, floor((box->y + box->box_height) * capture->scale));
     if (right <= x || bottom <= y)
         return;
     if (pixels->row_count == 32) {
@@ -86,6 +140,7 @@ bm_sophia_raster_paint(struct bm_sophia_raster *raster, struct bm_menu *menu,
     *pixels = (struct bm_sophia_pixels){0};
     if (!raster || !menu || !menu->font.name || !menu->filter_item ||
         !isfinite(menu->border_size) || menu->border_size < 0 ||
+        !isfinite(menu->border_radius) || menu->border_radius < 0 ||
         menu->border_size >= raster->width || menu->lines > 32)
         return false;
 
@@ -98,7 +153,7 @@ bm_sophia_raster_paint(struct bm_sophia_raster *raster, struct bm_menu *menu,
 
     struct bm_sophia_pixels next = {.width = raster->width, .height = raster->height};
     struct row_capture capture = {&next, raster->painter.scale, false};
-    struct cairo_row_observer observer = {capture_row, &capture};
+    struct cairo_row_observer observer = {capture_row, &capture, capture_cover, capture_clip};
     struct cairo_paint_result result;
     bm_cairo_paint_observed(&raster->painter, raster->width, raster->height, menu, &result, &observer);
     cairo_surface_flush(raster->painter.surface);
