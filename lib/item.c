@@ -19,6 +19,7 @@ bm_item_free(struct bm_item *item)
 {
     assert(item);
     free(item->text);
+    free(item->search_text);
     free(item);
 }
 

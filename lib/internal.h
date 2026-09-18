@@ -200,6 +200,10 @@ struct bm_item {
      * Matching will be done against this text as well.
      */
     char *text;
+
+    /* Optional owned matching text for a catalog-backed item. Rendering and
+     * prefix/exact ranking still use text. NULL preserves upstream behavior. */
+    char *search_text;
 };
 
 /**

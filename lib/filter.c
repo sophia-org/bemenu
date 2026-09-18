@@ -118,12 +118,13 @@ filter_dmenu_fun(struct bm_menu *menu, char addition, char* (*fstrstr)(const cha
     uint32_t i, f, e;
     for (e = f = i = 0; i < count; ++i) {
         struct bm_item *item = items[i];
-        if (!item->text && tokc != 0)
+        const char *search = item->search_text ? item->search_text : item->text;
+        if (!search && tokc != 0)
             continue;
 
-        if (tokc && item->text) {
+        if (tokc && search) {
             uint32_t t;
-            for (t = 0; t < tokc && fstrstr(item->text, tokv[t]); ++t);
+            for (t = 0; t < tokc && fstrstr(search, tokv[t]); ++t);
             if (t < tokc)
                 continue;
         }

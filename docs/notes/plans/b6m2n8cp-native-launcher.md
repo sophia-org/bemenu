@@ -35,7 +35,7 @@ grant-scoped compositor node identity. The existing single-shell transport now
 uses that implementation through its compatibility facade. Session still needs
 multi-component construction and routing; this is not native admission.
 
-This fork pins Sophia's public C sources at `f6d04ac94f87e3e26a7d3978f8c52f19493887b4` in `vendor/sophia-shell`,
+This fork pins Sophia's public C sources at `dfaf885ee1ea31e6955aea3afffcb7e435894acc` in `vendor/sophia-shell`,
 including their BSD license, exact upstream paths and SHA-256 manifest. The
 optional renderer compiles these sources without Rust or a Sophia checkout.
 `make check-sophia` verifies the manifest and runs the independent typed catalog
@@ -62,3 +62,28 @@ must establish current event authority and own ACK/revision/activation state.
 Headless tests exercise Unicode deletion, rejected-event preservation, bounded
 filtering, navigation and actual Cairo pixel changes. This is menu behavior,
 not a connected native backend or native acceptance.
+
+
+The catalog/menu bridge copies a committed authorized catalog into real Bemenu
+items, with exact connection/generation/slot display references. Unavailable
+entries are omitted. Labels remain unchanged; optional owned matching text adds
+catalog keywords to the existing default/case-insensitive token matcher. Ordinary
+items retain the upstream label-only path, and exact/prefix ranking still uses
+the visible label. No command paths or execution are introduced.
+
+The bridge stages all new items before replacing an owned menu. It refuses stale
+or other-connection catalogs and external menu ownership, and clears the prior
+filter cache on replacement. It accounts for upstream nonempty item replacement
+freeing only the pointer list, while empty replacement frees the items too.
+Controls cover real C catalog assembly, partial transfer, unchanged-query refresh,
+keyword search, unavailable items, forged item metadata, four direct adapter
+allocation failures, and 1000 populated/empty replacements. The focused menu
+control passes device-hidden Clang address/undefined-behavior sanitizers; it does
+not exercise Cairo, sockets or native presentation. Full `check-sophia` also
+retains the existing Cairo gate. Compiled keyword and generation mutants fail.
+
+The vendor pin includes the checked native candidate/chunk, allocation and
+ACK/activation encoders and six inbound native record decoders. This bridge is
+not the current presented model: later lifecycle code must copy exact row
+identities into candidate/presented state and retain protocol obligations without
+holding mutable menu items. Constructor enablement remains pending that join.

@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "repository": "https://github.com/sophia-org/sophia-stack",
-  "commit": "f6d04ac94f87e3e26a7d3978f8c52f19493887b4",
+  "commit": "dfaf885ee1ea31e6955aea3afffcb7e435894acc",
   "license": "BSD-3-Clause",
   "files": {
     "sophia_shell_wire.h": {
@@ -46,7 +46,7 @@
     },
     "sophia_shell_native_launcher.h": {
       "source": "bindings/c/sophia_shell_native_launcher.h",
-      "sha256": "05c2412c4db8d45bc17978cf12c8e3a5d93ecbb320f0e16c472703f02faf6429"
+      "sha256": "d43e9835ff20c05066b804cd463749ba2647a605de78e4b858a749b97eda86f1"
     },
     "shell_wire/native_launcher.c": {
       "source": "bindings/c/shell_wire/native_launcher.c",
@@ -63,6 +63,18 @@
     "shell_wire/text.h": {
       "source": "bindings/c/shell_wire/text.h",
       "sha256": "d4820956f473c6142b3a54b9e392db17640642bffd94856fd7ce4173f0445221"
+    },
+    "shell_wire/native_launcher_codec.c": {
+      "source": "bindings/c/shell_wire/native_launcher_codec.c",
+      "sha256": "2a4a889000ff9a552d03009c460711ea0717aaedc33ccf30dfcea4d8b0464b08"
+    },
+    "shell_wire/native_launcher_content.c": {
+      "source": "bindings/c/shell_wire/native_launcher_content.c",
+      "sha256": "eb4f8c950534c90120915c0e545d26853f981e809dcf335a2e356cc64f5786f0"
+    },
+    "tests/sophia_shell_wire_native_codec_test.c": {
+      "source": "bindings/c/tests/sophia_shell_wire_native_codec_test.c",
+      "sha256": "d66212318d0a4f7d17a09e82920309fa765f8e44c862061304797afa29ee24cb"
     }
   }
 }
