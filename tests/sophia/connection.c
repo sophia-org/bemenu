@@ -1,0 +1,229 @@
+#include "internal.h"
+#include "renderers/sophia/connection_internal.h"
+#include "../../vendor/sophia-shell/shell_wire/fields.h"
+#include <assert.h>
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+static uint8_t limits_frame[288], record[2048], reply[8192];
+static int peers[2];
+static struct bm_sophia_connection *connection;
+static struct bm_menu *menu;
+static unsigned refuse_lifecycle;
+static unsigned refuse_commit;
+int __real_sophia_shell_native_lifecycle_new(const struct sophia_shell_frame *, uint64_t,
+    struct sophia_shell_outbox *, struct sophia_shell_native_lifecycle **);
+int __wrap_sophia_shell_native_lifecycle_new(const struct sophia_shell_frame *f, uint64_t g,
+    struct sophia_shell_outbox *o, struct sophia_shell_native_lifecycle **out)
+{
+    if (refuse_lifecycle) {--refuse_lifecycle; return SOPHIA_SHELL_BUSY;}
+    return __real_sophia_shell_native_lifecycle_new(f, g, o, out);
+}
+int __real_sophia_shell_outbox_commit(struct sophia_shell_outbox *, struct sophia_shell_outbox_reservation,
+    const struct sophia_shell_outbound_frame *, unsigned);
+int __wrap_sophia_shell_outbox_commit(struct sophia_shell_outbox *o, struct sophia_shell_outbox_reservation t,
+    const struct sophia_shell_outbound_frame *f, unsigned n)
+{
+    if (refuse_commit) {--refuse_commit; return SOPHIA_SHELL_BUSY;}
+    return __real_sophia_shell_outbox_commit(o, t, f, n);
+}
+
+static void send_frame(uint16_t kind, uint64_t tx, const uint8_t *p, size_t n)
+{
+    size_t length;
+    assert(sophia_shell_frame_encode(record, sizeof(record), kind, tx, p, n, &length) == 0);
+    assert(send(peers[1], record, length, MSG_NOSIGNAL) == (ssize_t)length);
+}
+static struct bm_sophia_connection_snapshot inspect(void)
+{
+    struct bm_sophia_connection_snapshot v;
+    assert(bm_sophia_connection_inspect(connection, &v)); return v;
+}
+static void tick(void)
+{
+    int r = bm_sophia_connection_service(connection);
+    assert(r == SOPHIA_SHELL_AGAIN || r == SOPHIA_SHELL_BUSY);
+}
+static void drain(void)
+{
+    while (recv(peers[1], reply, sizeof(reply), MSG_DONTWAIT) > 0) {}
+    assert(errno == EAGAIN || errno == EWOULDBLOCK);
+}
+static void setup(void)
+{
+    static struct bm_renderer renderer;
+    menu = calloc(1, sizeof(*menu)); assert(menu); menu->renderer = &renderer;
+    menu->filter_item = bm_item_new(NULL); assert(menu->filter_item);
+    assert(bm_menu_set_font(menu, "DejaVu Sans 14"));
+    for (unsigned i = 0; i < BM_COLOR_LAST; ++i) assert(bm_menu_set_color(menu, i, NULL));
+    bm_menu_set_lines(menu, 4);
+    assert(socketpair(AF_UNIX, SOCK_STREAM, 0, peers) == 0);
+    assert(bm_sophia_connection_new(menu, peers[0], &connection) == 0);
+    tick();
+    assert(recv(peers[1], reply, sizeof(reply), MSG_DONTWAIT) == 36);
+    struct sophia_shell_frame hello;
+    assert(sophia_shell_frame_decode(reply, 36, &hello) == 0 && hello.kind == 96);
+    assert(shell_get16(hello.payload) == 7 && shell_get64(hello.payload + 4) == 0x9a0);
+}
+static void welcome(void)
+{
+    uint8_t p[28] = {0}; shell_put16(p, 7); shell_put64(p+4, 11); shell_put64(p+12, 0x9a0);
+    shell_put16(p+20, 16); shell_put16(p+22, 128); shell_put16(p+24, 16);
+    send_frame(97, 0, p, sizeof(p)); tick(); assert(inspect().welcomed);
+}
+static void limits(void)
+{
+    assert(send(peers[1], limits_frame, sizeof(limits_frame), MSG_NOSIGNAL) == sizeof(limits_frame));
+    tick(); assert(inspect().content);
+}
+static void catalog_begin(uint64_t gen, uint16_t count)
+{
+    uint8_t p[20] = {0}; shell_put64(p, 11); shell_put64(p+8, gen); shell_put16(p+16, count);
+    send_frame(114, gen, p, sizeof(p));
+}
+static void catalog_entry(uint64_t gen, uint16_t slot, const char *label, const char *keywords)
+{
+    uint8_t p[408] = {0}; size_t n = strlen(label), k = strlen(keywords);
+    shell_put64(p, 11); shell_put64(p+8, gen); shell_put16(p+16, slot); shell_put16(p+18, 1);
+    shell_put16(p+20, n); memcpy(p+22, label, n); shell_put16(p+22+n, k); memcpy(p+24+n, keywords, k);
+    send_frame(115, gen, p, 24+n+k);
+}
+static void catalog_end(uint64_t gen)
+{
+    uint8_t p[16] = {0}; shell_put64(p, 11); shell_put64(p+8, gen); send_frame(116, gen, p, sizeof(p));
+}
+static void catalog(void)
+{
+    catalog_begin(9, 2); catalog_entry(9, 7, "Browser", "web"); catalog_entry(9, 3, "Editor", "code");
+    catalog_end(9); tick(); assert(inspect().catalog_generation == 9);
+}
+static void teardown(void)
+{
+    close(peers[0]); close(peers[1]); bm_sophia_connection_dispose(connection);
+    uint32_t count; bm_menu_get_items(menu, &count); assert(!count); bm_menu_free(menu);
+}
+static void grant(uint8_t *p) {shell_put64(p, 11); shell_put64(p+8, 3);}
+static void opening(void)
+{
+    uint8_t p[56] = {0}; grant(p); shell_put64(p+16, 1); shell_put64(p+24, 2);
+    shell_put64(p+32, 7); shell_put64(p+40, 9); shell_put64(p+48, 1);
+    send_frame(187, 50, p, sizeof(p)); tick(); assert(inspect().native.open);
+}
+static void supplied_presentation(void)
+{
+    /* Exercise connection FIFO/menu delegation, not the future frame scheduler:
+     * allocation, resident resource, permit and native outcomes are supplied. */
+    struct bm_sophia_raster *raster = bm_sophia_raster_new(640, 320, 1);
+    struct bm_sophia_view view; assert(raster && bm_sophia_view_capture(raster, &connection->model, &view));
+    assert(view.row_count == 2 && view.selected == 7);
+    struct sophia_shell_native_candidate begin = {
+        .grant = {11,3}, .output = {2,7}, .facts_generation = 1, .pacing_permit = 2,
+        .interaction_generation = 1, .placement_count = 1, .opening = 1,
+        .catalog_generation = view.catalog_generation, .state_revision = 1,
+        .selected = view.selected, .row_count = view.row_count,
+    };
+    struct sophia_shell_native_chunk chunk = {
+        .grant = {11,3}, .surface_count = 1, .placement_count = 1, .target_count = view.row_count,
+        .surface = {{1,2},1,1,{0}}, .placements = {{{9,1},0,0}},
+    };
+    for (unsigned i = 0; i < view.row_count; ++i) {
+        const struct bm_sophia_view_row *row = &view.rows[i]; begin.rows[i] = row->slot;
+        chunk.targets[i] = (struct sophia_shell_native_target){i+1,1,row->slot,row->x,row->y,row->width,row->height};
+    }
+    assert(sophia_shell_native_lifecycle_offer(connection->native, &begin, &chunk, &connection->next_transaction) == 0);
+    assert(sophia_shell_native_lifecycle_pump(connection->native, &connection->next_transaction) == 0);
+    tick(); drain(); bm_sophia_raster_free(raster);
+    uint8_t p[68] = {0}; grant(p); shell_put64(p+16, 1); shell_put64(p+24, 2); shell_put64(p+32, 7);
+    shell_put16(p+40, 1); send_frame(175, 1, p, sizeof(p));
+    shell_put16(p+40, 2); shell_put64(p+44, 10); send_frame(175, 1, p, sizeof(p)); tick();
+    assert(inspect().native.presented && !inspect().native.focused);
+}
+static void binding(uint8_t *p)
+{
+    uint64_t values[] = {11,3,1,2,7,1,2,9,1,10,1,1,1};
+    for (unsigned i = 0; i < 13; ++i) shell_put64(p+8*i, values[i]);
+}
+static void real_menu_input(void)
+{
+    setup(); welcome(); limits(); catalog(); opening(); supplied_presentation();
+    uint8_t focus[104]; binding(focus); send_frame(191, 60, focus, sizeof(focus));
+    uint8_t input[135] = {0}; binding(input); shell_put64(input+104, 1); shell_put64(input+112, 2);
+    shell_put64(input+120, 10); shell_put16(input+128, 1); shell_put16(input+130, 3); memcpy(input+132, "web", 3);
+    send_frame(193, 61, input, sizeof(input)); refuse_commit = 1; tick();
+    assert(inspect().native.state_revision == 2 && menu->filter && !strcmp(menu->filter, "web"));
+    assert(connection->wire.rx_used == sizeof(input)+24 && connection->outbox.reservation_count == 1);
+    tick(); /* Original input retries its response, not its completed edit. */
+    assert(!strcmp(menu->filter, "web") && !connection->wire.rx_used && !connection->outbox.reservation_count);
+    uint32_t count; struct bm_item **items = bm_menu_get_filtered_items(menu, &count);
+    assert(count == 1 && !strcmp(bm_item_get_text(items[0]), "Browser"));
+    tick(); ssize_t n = recv(peers[1], reply, sizeof(reply), MSG_DONTWAIT);
+    assert(n == 148); struct sophia_shell_frame ack;
+    assert(sophia_shell_frame_decode(reply, n, &ack) == 0 && ack.kind == 194 && shell_get16(ack.payload+120) == 1);
+    send_frame(193, 61, input, sizeof(input));
+    assert(bm_sophia_connection_service(connection) == SOPHIA_SHELL_INVALID);
+    assert(!strcmp(menu->filter, "web")); teardown();
+}
+static void bounded_catalog_and_order(void)
+{
+    setup(); welcome(); catalog(); assert(!inspect().lifecycle); limits(); assert(inspect().lifecycle);
+    catalog_begin(10, 20);
+    for (unsigned i = 0; i < 20; ++i) catalog_entry(10, i+1, "Entry", "");
+    catalog_end(10); tick();
+    assert(inspect().catalog_generation == 9); /* Incomplete after the bounded visit. */
+    tick(); assert(inspect().catalog_generation == 10);
+    teardown();
+    setup();
+    uint8_t p[28] = {0}; shell_put16(p, 6); shell_put64(p+4, 11); shell_put64(p+12, 0x603);
+    shell_put16(p+20, 16); shell_put16(p+22, 128); shell_put16(p+24, 16); send_frame(97, 0, p, sizeof(p));
+    assert(bm_sophia_connection_service(connection) == SOPHIA_SHELL_INVALID && !inspect().welcomed);
+    teardown();
+}
+static void retained_catalog_end(void)
+{
+    setup(); welcome(); limits();
+    catalog_begin(9, 2); catalog_entry(9, 7, "Browser", "web"); catalog_entry(9, 3, "Editor", "code");
+    catalog_end(9);
+    uint8_t p[56] = {0}; grant(p); shell_put64(p+16, 1); shell_put64(p+24, 2);
+    shell_put64(p+32, 7); shell_put64(p+40, 9); shell_put64(p+48, 1);
+    send_frame(187, 50, p, sizeof(p));
+    refuse_lifecycle = 1;
+    assert(bm_sophia_connection_service(connection) == SOPHIA_SHELL_BUSY);
+    assert(inspect().catalog_generation == 9 && !inspect().lifecycle);
+    assert(connection->catalog_pending && connection->wire.rx_used == 40);
+    assert(shell_get16(connection->wire.rx+6) == 116);
+    uint32_t count; struct bm_item **items = bm_menu_get_items(menu, &count);
+    assert(count == 2); struct bm_item *first = items[0];
+    tick(); assert(inspect().lifecycle && inspect().native.open && !connection->catalog_pending);
+    items = bm_menu_get_items(menu, &count); assert(count == 2 && items[0] == first);
+    teardown();
+    setup(); welcome();
+    uint8_t bad[288]; memcpy(bad, limits_frame, sizeof(bad)); shell_put64(bad+24, 12);
+    assert(send(peers[1], bad, sizeof(bad), MSG_NOSIGNAL) == sizeof(bad));
+    assert(bm_sophia_connection_service(connection) == SOPHIA_SHELL_INVALID && !inspect().content);
+    teardown();
+}
+static unsigned nibble(char c)
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    abort();
+}
+int main(int argc, char **argv)
+{
+    assert(argc == 2); FILE *f = fopen(argv[1], "r"); assert(f); static char line[4096]; bool found = false;
+    while (fgets(line, sizeof(line), f)) {
+        if (strncmp(line, "content-161 ", 12)) continue;
+        assert(strcspn(line+12, "\r\n") == sizeof(limits_frame)*2);
+        for (unsigned i = 0; i < sizeof(limits_frame); ++i)
+            limits_frame[i] = 16*nibble(line[12+2*i]) + nibble(line[13+2*i]);
+        found = true; break;
+    }
+    fclose(f); assert(found);
+    real_menu_input(); bounded_catalog_and_order(); retained_catalog_end();
+    puts("bemenu_connection fifo=pass real_menu=pass supplied_presentation=true native=false");
+    return 0;
+}

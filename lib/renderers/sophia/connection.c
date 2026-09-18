@@ -1,0 +1,107 @@
+#include "connection_internal.h"
+#include <stdlib.h>
+
+int
+bm_sophia_connection_new(struct bm_menu *menu, int fd, struct bm_sophia_connection **out)
+{
+    if (!menu || fd < 0 || !out)
+        return SOPHIA_SHELL_ARGUMENT;
+    uint32_t count;
+    bm_menu_get_items(menu, &count);
+    if (count)
+        return SOPHIA_SHELL_INVALID;
+    struct bm_sophia_connection *c = calloc(1, sizeof(*c));
+    if (!c)
+        return SOPHIA_SHELL_BUSY;
+    c->menu = menu; c->fd = fd; c->next_transaction = 1;
+    int result = sophia_shell_wire_init(&c->wire, fd, c->rx, sizeof(c->rx), c->unused_tx, sizeof(c->unused_tx));
+    if (result == SOPHIA_SHELL_OK)
+        result = sophia_shell_outbox_init(&c->outbox, 131072, 64, 1024, 4);
+    uint8_t bytes[36]; size_t length;
+    if (result == SOPHIA_SHELL_OK)
+        result = sophia_shell_hello_encode(bytes, sizeof(bytes), (struct sophia_shell_hello){7,7,0x9a0}, &length);
+    if (result == SOPHIA_SHELL_OK) {
+        struct sophia_shell_outbound_frame hello = {bytes, length, SOPHIA_SHELL_OUTBOUND_CONTROL};
+        result = sophia_shell_outbox_push(&c->outbox, &hello, 1);
+    }
+    if (result != SOPHIA_SHELL_OK) {
+        sophia_shell_outbox_dispose(&c->outbox); free(c); return result;
+    }
+    *out = c;
+    return SOPHIA_SHELL_OK;
+}
+
+static int terminal(struct bm_sophia_connection *c, int result)
+{
+    c->terminal = result;
+    return result;
+}
+
+int
+bm_sophia_connection_service(struct bm_sophia_connection *c)
+{
+    if (!c)
+        return SOPHIA_SHELL_ARGUMENT;
+    if (c->terminal)
+        return c->terminal;
+    /* One flush owner and one receive FIFO. Never use wire_queue/flush here. */
+    int r = sophia_shell_outbox_flush(&c->outbox, c->fd, 64 * 1024);
+    if (r < 0 || r == SOPHIA_SHELL_CLOSED)
+        return terminal(c, r);
+    size_t remaining = 64 * 1024;
+    unsigned frames = c->content ? c->limits.max_frames_per_service_tick : 16;
+    if (frames > 16) frames = 16;
+    for (unsigned i = 0; i < frames; ++i) {
+        struct sophia_shell_frame frame;
+        size_t before = c->wire.rx_used;
+        r = sophia_shell_wire_receive(&c->wire, remaining, &frame);
+        remaining -= c->wire.rx_used - before;
+        if (r == SOPHIA_SHELL_AGAIN)
+            break;
+        if (r != SOPHIA_SHELL_FRAME)
+            return terminal(c, r);
+        r = bm_sophia_connection_receive(c, &frame);
+        if (r == SOPHIA_SHELL_BUSY)
+            return r;
+        if (r != SOPHIA_SHELL_OK)
+            return terminal(c, r);
+        r = sophia_shell_wire_consume(&c->wire);
+        if (r != SOPHIA_SHELL_OK)
+            return terminal(c, r);
+        /* A limits record may reduce the current visit's allowance. */
+        if (c->content && c->limits.max_frames_per_service_tick < frames)
+            frames = c->limits.max_frames_per_service_tick;
+        if (!remaining)
+            break;
+    }
+    return SOPHIA_SHELL_AGAIN;
+}
+
+bool
+bm_sophia_connection_inspect(const struct bm_sophia_connection *c,
+                             struct bm_sophia_connection_snapshot *out)
+{
+    if (!c || !out) return false;
+    struct bm_sophia_connection_snapshot v = {
+        .welcomed = c->welcomed, .content = c->content, .catalog = c->model.generation != 0,
+        .lifecycle = c->native != NULL, .connection_epoch = c->welcome.connection_epoch,
+        .catalog_generation = c->model.generation, .facts_generation = c->facts.generation,
+        .queued_records = c->outbox.count, .queued_bytes = c->outbox.bytes,
+    };
+    if (c->native && sophia_shell_native_lifecycle_inspect(c->native, &v.native) != SOPHIA_SHELL_OK)
+        return false;
+    *out = v; return true;
+}
+
+void
+bm_sophia_connection_dispose(struct bm_sophia_connection *c)
+{
+    if (!c) return;
+    sophia_shell_native_lifecycle_dispose(c->native);
+    sophia_shell_upload_dispose(c->upload);
+    sophia_shell_outbox_dispose(&c->outbox);
+    /* No replacement of externally modified menu ownership. Such modification
+     * violates this connection's borrowing contract; never free foreign items. */
+    bm_sophia_catalog_clear(&c->model);
+    free(c);
+}

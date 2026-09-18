@@ -131,3 +131,14 @@ allocation/permits, upload/release, these views and native candidate/input servi
 Final hit-target policy must handle painter decorations; the background observer
 is not a substitute for that policy. Live Session admission and attended
 acceptance remain open; `lom-test` is not ready from these component gates.
+
+
+The [connection owner](../concepts/d7w2q8nr-one-connection-native-dispatch.md) now
+joins actual negotiation, catalog/menu installation, resource reply dispatch and
+presented input through one receive FIFO and one outbound owner. Real private
+socket controls drive an actual Bemenu text edit and ACK, with supplied native
+presentation and an explicitly seeded candidate. Refused catalog installation and
+input-response transfer retain the borrowed frame without replaying completed
+effects. Automatic allocation/render/upload/permit scheduling, final target policy,
+application deadlines/executable startup and Session live integration remain open.
+This is progress on t003, not physical-run readiness or completed t002/t003.
