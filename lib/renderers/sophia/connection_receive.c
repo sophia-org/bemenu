@@ -94,7 +94,11 @@ bm_sophia_connection_receive(struct bm_sophia_connection *c, const struct sophia
         return sophia_shell_upload_reply(c->upload, f);
     if (f->kind == 164)
         return bm_sophia_allocation_receive(c, f);
+    if (f->kind == 177)
+        return bm_sophia_permit_receive(c, f);
     if (!c->native) return SOPHIA_SHELL_INVALID;
+    if (f->kind == 175)
+        return bm_sophia_candidate_receive(c, f);
     return sophia_shell_native_lifecycle_receive(c->native, f, &c->next_transaction,
                                                 bm_sophia_view_edit, c->menu);
 }

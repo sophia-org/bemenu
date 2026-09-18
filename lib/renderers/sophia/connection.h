@@ -26,6 +26,9 @@ int bm_sophia_connection_new(struct bm_menu *menu, int fd,
  * frame in place; subsequent frames cannot pass it. Caller owns polling,
  * monotonic deadlines and termination on a terminal result. */
 int bm_sophia_connection_service(struct bm_sophia_connection *connection);
+/* Same visit with caller-supplied monotonic milliseconds, for an event loop or
+ * deterministic private host. Clock regression is terminal. */
+int bm_sophia_connection_service_at(struct bm_sophia_connection *connection, uint64_t now_msec);
 bool bm_sophia_connection_inspect(const struct bm_sophia_connection *connection,
                                  struct bm_sophia_connection_snapshot *snapshot);
 void bm_sophia_connection_dispose(struct bm_sophia_connection *connection);

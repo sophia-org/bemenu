@@ -1,5 +1,6 @@
 #include "connection_internal.h"
 #include <stdlib.h>
+#include <time.h>
 
 int
 bm_sophia_connection_new(struct bm_menu *menu, int fd, struct bm_sophia_connection **out)
@@ -40,10 +41,23 @@ static int terminal(struct bm_sophia_connection *c, int result)
 int
 bm_sophia_connection_service(struct bm_sophia_connection *c)
 {
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0 || now.tv_sec < 0 ||
+        (uint64_t)now.tv_sec > (UINT64_MAX-999)/1000)
+        return SOPHIA_SHELL_IO_ERROR;
+    return bm_sophia_connection_service_at(c, (uint64_t)now.tv_sec*1000 + now.tv_nsec/1000000);
+}
+
+int
+bm_sophia_connection_service_at(struct bm_sophia_connection *c, uint64_t now)
+{
     if (!c)
         return SOPHIA_SHELL_ARGUMENT;
     if (c->terminal)
         return c->terminal;
+    if (c->clock_seen && now < c->now_msec)
+        return terminal(c, SOPHIA_SHELL_INVALID);
+    c->clock_seen = true; c->now_msec = now;
     /* One flush owner and one receive FIFO. Never use wire_queue/flush here. */
     int r = sophia_shell_outbox_flush(&c->outbox, c->fd, 64 * 1024);
     if (r < 0 || r == SOPHIA_SHELL_CLOSED)

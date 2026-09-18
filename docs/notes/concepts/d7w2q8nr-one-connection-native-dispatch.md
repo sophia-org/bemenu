@@ -112,3 +112,47 @@ final hit targets or present the uploaded pixels. Those steps, resource cleanup
 across replacement/close, deadlines, application startup and live Session wiring
 remain required. The previous fixture's supplied Presented facts are not relabelled
 as evidence for this automatic upload path.
+
+## Frame permits, candidate submission and closed-view release
+
+The next joined slice schedules a frame demand only for a current resident view.
+The retained demand identifies its transaction, output and allocation. A permit
+must match that demand and grant, respect negotiated limits and advance the permit
+identity. The connection samples CLOCK_MONOTONIC, with an explicit clock entry for
+fixtures; clock regression refuses. Its conservative local TTL starts at demand
+enqueue, not reply receipt. Local expiry does not fabricate server cancellation:
+the owner waits for the exact server expiry before issuing another demand.
+
+The actual generic lifecycle queues Begin/Chunk then End with the copied view's
+original opening, catalog/edit revision, allocation and observed rows. Candidate
+feedback must name the original Begin transaction. Prepared leaves the candidate
+pending; matching Presented promotes it. The previously shown resource remains
+owned until replacement or close makes it eligible for retirement. Cleanup runs
+while closed; Retire enqueue does not free the immutable bytes. Only exact Released
+frees its slot and copied metadata. Stale unsubmitted views cancel/retire through
+the existing upload owner, without another resource ledger.
+
+Evidence at Sophia `.artifacts/bemenu-frame-final` uses real private sockets and
+actual allocation request, Cairo raster, immutable upload, frame demand,
+Begin/Chunk/End, generic presentation state and resource retirement. The peer
+supplies allocation/status/permit/Prepared/Presented/Closed/Released; neither
+Session resource accounting nor native presentation is exercised. Controls cover
+wrong permit transaction, expired local TTL followed by exact server expiry and
+renewed demand, Prepared remaining noninteractive, wrong candidate transaction,
+closed-view byte retention and mismatched release refusal. The fixture's initial
+Released record omitted its two-byte reason field; retained failed runs are not
+positive evidence.
+
+This is not the complete persistent controller. Remaining work includes final
+decoration-aware target geometry (current submitted rectangles are observed row
+backgrounds), cancellation/late-expiry races, deadlines, allocation release and
+reopen/topology replacement, sustained edit/replacement controls, the executable,
+and live Session integration. A permit queued before its local TTL is not proof
+that the server received it before expiry. No hardware or live run was made.
+
+Three compiled mutations fail their behavioral assertions: omit permit transaction
+matching, allow a locally expired permit to offer, and treat Prepared as terminal.
+Removing the connection's candidate-transaction guard alone does **not** defeat
+the test: the generic lifecycle independently refuses the mismatch. That surviving
+mutation is recorded as redundant-defense evidence, not a fourth mutation kill.
+The disposable source was restored and its full project gate passed again.

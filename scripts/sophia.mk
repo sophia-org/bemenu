@@ -2,7 +2,7 @@
 sophia: bemenu-renderer-sophia.so
 
 SOPHIA_WIRE = $(wildcard vendor/sophia-shell/shell_wire/*.c)
-SOPHIA_SOURCES = lib/renderers/sophia/connection.c lib/renderers/sophia/connection_receive.c lib/renderers/sophia/connection_allocation.c lib/renderers/sophia/connection_schedule.c lib/renderers/sophia/view.c lib/renderers/sophia/catalog.c lib/renderers/sophia/input.c lib/renderers/sophia/raster.c $(SOPHIA_WIRE)
+SOPHIA_SOURCES = lib/renderers/sophia/connection.c lib/renderers/sophia/connection_receive.c lib/renderers/sophia/connection_allocation.c lib/renderers/sophia/connection_schedule.c lib/renderers/sophia/connection_frames.c lib/renderers/sophia/view.c lib/renderers/sophia/catalog.c lib/renderers/sophia/input.c lib/renderers/sophia/raster.c $(SOPHIA_WIRE)
 SOPHIA_HEADERS = lib/renderers/sophia/connection.h lib/renderers/sophia/connection_internal.h lib/renderers/sophia/view.h lib/renderers/sophia/catalog.h lib/renderers/sophia/input.h lib/renderers/sophia/raster.h lib/renderers/cairo_renderer.h $(wildcard vendor/sophia-shell/*.h vendor/sophia-shell/shell_wire/*.h)
 SOPHIA_LIBS = $(shell $(PKG_CONFIG) --libs cairo pangocairo fontconfig) -lm
 SOPHIA_INCLUDES = $(shell $(PKG_CONFIG) --cflags cairo pangocairo fontconfig)

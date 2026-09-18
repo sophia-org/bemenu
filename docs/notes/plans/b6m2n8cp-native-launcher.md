@@ -151,3 +151,10 @@ The next client join is frame permits and exact candidate submission, followed b
 replacement/close resource scheduling and deadlines. Final hit-target policy and
 persistent application startup remain incomplete. Resident bytes in a supplied
 private peer do not establish native presentation or `lom-test` readiness.
+
+The connection now joins resident views to demand/permit and native candidate
+submission, promoting only matching Presented and retaining closed-view resources
+until exact Released. See the [frame scheduling record](../concepts/d7w2q8nr-one-connection-native-dispatch.md#frame-permits-candidate-submission-and-closed-view-release).
+The device-hidden peer supplies server outcomes; this is not live Session or
+native acceptance. Final target geometry, permit cancellation/deadline races,
+allocation reopen/replacement and executable/live supervision remain required.

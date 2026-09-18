@@ -15,6 +15,7 @@ static struct bm_sophia_connection *connection;
 static struct bm_menu *menu;
 static unsigned refuse_lifecycle;
 static unsigned refuse_commit;
+static uint64_t now_msec;
 int __real_sophia_shell_native_lifecycle_new(const struct sophia_shell_frame *, uint64_t,
     struct sophia_shell_outbox *, struct sophia_shell_native_lifecycle **);
 int __wrap_sophia_shell_native_lifecycle_new(const struct sophia_shell_frame *f, uint64_t g,
@@ -45,7 +46,9 @@ static struct bm_sophia_connection_snapshot inspect(void)
 }
 static void tick(void)
 {
-    int r = bm_sophia_connection_service(connection);
+    int r = bm_sophia_connection_service_at(connection,now_msec++);
+    if (r != SOPHIA_SHELL_AGAIN && r != SOPHIA_SHELL_BUSY)
+        fprintf(stderr,"connection tick result=%d kind=%u clock=%llu\n",r,connection->wire.rx_used >= 8 ? shell_get16(connection->wire.rx+6) : 0,(unsigned long long)now_msec);
     assert(r == SOPHIA_SHELL_AGAIN || r == SOPHIA_SHELL_BUSY);
 }
 static void drain(void)
@@ -55,6 +58,7 @@ static void drain(void)
 }
 static void setup(void)
 {
+    now_msec = 1000;
     static struct bm_renderer renderer;
     menu = calloc(1, sizeof(*menu)); assert(menu); menu->renderer = &renderer;
     menu->filter_item = bm_item_new(NULL); assert(menu->filter_item);
@@ -164,7 +168,7 @@ static void real_menu_input(void)
     assert(n == 148); struct sophia_shell_frame ack;
     assert(sophia_shell_frame_decode(reply, n, &ack) == 0 && ack.kind == 194 && shell_get16(ack.payload+120) == 1);
     send_frame(193, 61, input, sizeof(input));
-    assert(bm_sophia_connection_service(connection) == SOPHIA_SHELL_INVALID);
+    assert(bm_sophia_connection_service_at(connection,now_msec++) == SOPHIA_SHELL_INVALID);
     assert(!strcmp(menu->filter, "web")); teardown();
 }
 static void bounded_catalog_and_order(void)
@@ -179,7 +183,7 @@ static void bounded_catalog_and_order(void)
     setup();
     uint8_t p[28] = {0}; shell_put16(p, 6); shell_put64(p+4, 11); shell_put64(p+12, 0x603);
     shell_put16(p+20, 16); shell_put16(p+22, 128); shell_put16(p+24, 16); send_frame(97, 0, p, sizeof(p));
-    assert(bm_sophia_connection_service(connection) == SOPHIA_SHELL_INVALID && !inspect().welcomed);
+    assert(bm_sophia_connection_service_at(connection,now_msec++) == SOPHIA_SHELL_INVALID && !inspect().welcomed);
     teardown();
 }
 static void retained_catalog_end(void)
@@ -191,7 +195,7 @@ static void retained_catalog_end(void)
     shell_put64(p+32, 7); shell_put64(p+40, 9); shell_put64(p+48, 1);
     send_frame(187, 50, p, sizeof(p));
     refuse_lifecycle = 1;
-    assert(bm_sophia_connection_service(connection) == SOPHIA_SHELL_BUSY);
+    assert(bm_sophia_connection_service_at(connection,now_msec++) == SOPHIA_SHELL_BUSY);
     assert(inspect().catalog_generation == 9 && !inspect().lifecycle);
     assert(connection->catalog_pending && connection->wire.rx_used == 40);
     assert(shell_get16(connection->wire.rx+6) == 116);
@@ -203,7 +207,7 @@ static void retained_catalog_end(void)
     setup(); welcome();
     uint8_t bad[288]; memcpy(bad, limits_frame, sizeof(bad)); shell_put64(bad+24, 12);
     assert(send(peers[1], bad, sizeof(bad), MSG_NOSIGNAL) == sizeof(bad));
-    assert(bm_sophia_connection_service(connection) == SOPHIA_SHELL_INVALID && !inspect().content);
+    assert(bm_sophia_connection_service_at(connection,now_msec++) == SOPHIA_SHELL_INVALID && !inspect().content);
     teardown();
 }
 static struct sophia_shell_frame client_record(void)
@@ -237,7 +241,7 @@ static void allocation_payload(uint8_t *p)
     shell_put64(p+80,1); shell_put32(p+96,640); shell_put32(p+100,320);
     shell_put32(p+112,640); shell_put32(p+116,320); shell_put32(p+120,1); shell_put32(p+124,1);
 }
-static void automatic_allocation_and_upload(void)
+static void automatic_allocation_and_upload(unsigned mode)
 {
     setup(); welcome(); limits(); catalog(); facts(); opening();
     struct sophia_shell_frame request = client_record();
@@ -276,7 +280,74 @@ static void automatic_allocation_and_upload(void)
     shell_put16(status+32,2); send_frame(166,end.transaction,status,sizeof(status)); tick();
     struct sophia_shell_upload_snapshot upload;
     assert(sophia_shell_upload_inspect(connection->upload,0,&upload) == 0 && upload.state == SOPHIA_UPLOAD_RESIDENT);
-    tick(); assert(!connection->outbox.count); /* No duplicate render/Begin for this revision. */
+    struct sophia_shell_frame demand = client_record();
+    assert(demand.kind == 176 && shell_get64(demand.payload+48) == 1);
+    uint64_t demand_tx = demand.transaction;
+    assert(connection->demand_pending && !connection->candidate_active && !inspect().native.presented);
+    uint8_t permit[64] = {0}; grant(permit); shell_put64(permit+16,2); shell_put64(permit+24,7);
+    shell_put64(permit+32,1); shell_put64(permit+40,1); shell_put16(permit+48,1);
+    shell_put32(permit+52,connection->limits.permit_timeout_ms);
+    shell_put32(permit+56,connection->limits.max_candidate_bytes);
+    if (mode == 1) {
+        send_frame(177,demand_tx+1,permit,sizeof(permit));
+        assert(bm_sophia_connection_service_at(connection,now_msec++) == SOPHIA_SHELL_INVALID);
+        assert(!connection->candidate_active && !inspect().native.presented);
+        free(expected); teardown(); return;
+    }
+    if (mode == 2) now_msec += connection->limits.permit_timeout_ms;
+    send_frame(177,demand_tx,permit,sizeof(permit)); tick();
+    if (mode == 2) {
+        assert(connection->permit_ready && !connection->candidate_active && !connection->outbox.count);
+        shell_put16(permit+48,2); shell_put16(permit+50,6);
+        shell_put32(permit+52,0); shell_put32(permit+56,0);
+        send_frame(177,demand_tx,permit,sizeof(permit)); tick();
+        struct sophia_shell_frame renewed = client_record();
+        assert(renewed.kind == 176 && shell_get64(renewed.payload+48) == 2);
+        assert(!connection->candidate_active && !inspect().native.presented);
+        free(expected); teardown(); return;
+    }
+    struct sophia_shell_frame candidate = client_record();
+    assert(candidate.kind == 189 && connection->candidate_active);
+    uint64_t candidate_tx = candidate.transaction;
+    struct sophia_shell_frame targets = client_record();
+    assert(targets.kind == 190);
+    struct sophia_shell_frame finish = client_record();
+    assert(finish.kind == 174 && !inspect().native.presented);
+    uint8_t outcome[68] = {0}; grant(outcome); shell_put64(outcome+16,1);
+    shell_put64(outcome+24,2); shell_put64(outcome+32,7); shell_put16(outcome+40,1);
+    if (mode == 4) {
+        send_frame(175,candidate_tx+1,outcome,sizeof(outcome));
+        assert(bm_sophia_connection_service_at(connection,now_msec++) == SOPHIA_SHELL_INVALID);
+        assert(connection->candidate_active && !connection->shown_valid && !inspect().native.presented);
+        free(expected); teardown(); return;
+    }
+    send_frame(175,candidate_tx,outcome,sizeof(outcome)); tick();
+    assert(connection->candidate_active && !connection->shown_valid && !inspect().native.presented);
+    shell_put16(outcome+40,2); shell_put64(outcome+44,10);
+    send_frame(175,candidate_tx,outcome,sizeof(outcome)); tick();
+    assert(!connection->candidate_active && connection->shown_valid && connection->shown_slot == 0);
+    assert(inspect().native.presented && !inspect().native.focused);
+    assert(sophia_shell_upload_inspect(connection->upload,0,&upload) == 0 && upload.state == SOPHIA_UPLOAD_RESIDENT);
+    tick(); assert(!connection->outbox.count); /* No duplicate candidate for this revision. */
+    uint8_t closed[28] = {0}; grant(closed); shell_put64(closed+16,1); shell_put16(closed+24,11);
+    send_frame(197,90,closed,sizeof(closed)); tick();
+    struct sophia_shell_frame retire = client_record();
+    assert(retire.kind == 170 && !memcmp(retire.payload,key,sizeof(key)));
+    assert(!connection->shown_valid && !inspect().native.presented);
+    assert(sophia_shell_upload_inspect(connection->upload,0,&upload) == 0 && upload.state == SOPHIA_UPLOAD_RELEASE_PENDING);
+    for (unsigned i = 0; i < 3; ++i) tick();
+    assert(connection->views[0].valid && connection->retire_slot[0]);
+    assert(sophia_shell_upload_inspect(connection->upload,0,&upload) == 0 && upload.state == SOPHIA_UPLOAD_RELEASE_PENDING);
+    uint8_t released[34] = {0}; memcpy(released,key,sizeof(key));
+    send_frame(171,retire.transaction+(mode == 3),released,sizeof(released));
+    if (mode == 3) {
+        assert(bm_sophia_connection_service_at(connection,now_msec++) == SOPHIA_SHELL_INVALID);
+        assert(sophia_shell_upload_inspect(connection->upload,0,&upload) == 0 && upload.state == SOPHIA_UPLOAD_RELEASE_PENDING);
+    } else {
+        tick();
+        assert(sophia_shell_upload_inspect(connection->upload,0,&upload) == 0 && upload.state == SOPHIA_UPLOAD_EMPTY);
+        assert(!connection->views[0].valid && !connection->retire_slot[0]);
+    }
     free(expected); teardown();
 }
 static void allocation_refusal_and_identity(void)
@@ -291,7 +362,7 @@ static void allocation_refusal_and_identity(void)
         else if (bad == 5) shell_put32(p+128,1);
         else tx = 2;
         send_frame(164,tx,p,sizeof(p));
-        assert(bm_sophia_connection_service(connection) == SOPHIA_SHELL_INVALID);
+        assert(bm_sophia_connection_service_at(connection,now_msec++) == SOPHIA_SHELL_INVALID);
         assert(connection->allocation_pending && !connection->allocation_valid && !connection->raster);
         assert(connection->allocation_counter == 1 && !connection->views[0].valid && !connection->outbox.count);
         teardown();
@@ -336,7 +407,8 @@ int main(int argc, char **argv)
         found = true; break;
     }
     fclose(f); assert(found);
-    real_menu_input(); bounded_catalog_and_order(); retained_catalog_end(); automatic_allocation_and_upload();
+    real_menu_input(); bounded_catalog_and_order(); retained_catalog_end();
+    for (unsigned mode = 0; mode < 5; ++mode) automatic_allocation_and_upload(mode);
     allocation_refusal_and_identity();
     fractional_allocation_origin();
     puts("bemenu_connection fifo=pass real_menu=pass supplied_presentation=true native=false");

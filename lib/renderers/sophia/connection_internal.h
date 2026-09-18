@@ -3,6 +3,7 @@
 #include "connection.h"
 #include "view.h"
 #include "../../../vendor/sophia-shell/sophia_shell_upload.h"
+#include "../../../vendor/sophia-shell/sophia_shell_content_control.h"
 
 struct bm_sophia_uploaded_view {
     bool valid;
@@ -36,6 +37,13 @@ struct bm_sophia_connection {
     bool allocation_pending, allocation_valid;
     struct bm_sophia_raster *raster;
     struct bm_sophia_uploaded_view views[SOPHIA_SHELL_UPLOAD_SLOTS];
+    uint64_t now_msec, demand_counter, demand_transaction, demand_started, last_permit, interaction_counter;
+    bool clock_seen, demand_pending, permit_ready, candidate_active, shown_valid;
+    struct sophia_shell_frame_demand demand;
+    struct sophia_shell_frame_permit permit;
+    unsigned candidate_slot, shown_slot;
+    uint64_t candidate_transaction;
+    bool retire_slot[SOPHIA_SHELL_UPLOAD_SLOTS];
 };
 int bm_sophia_connection_receive(struct bm_sophia_connection *c,
                                 const struct sophia_shell_frame *frame);
@@ -46,4 +54,10 @@ int bm_sophia_allocation_receive(struct bm_sophia_connection *c,
                                 const struct sophia_shell_frame *frame);
 bool bm_sophia_allocation_current(const struct bm_sophia_connection *c,
                                  const struct sophia_shell_native_lifecycle_snapshot *state);
+int bm_sophia_frame_service(struct bm_sophia_connection *c,
+                           const struct sophia_shell_native_lifecycle_snapshot *state);
+int bm_sophia_permit_receive(struct bm_sophia_connection *c, const struct sophia_shell_frame *frame);
+int bm_sophia_candidate_receive(struct bm_sophia_connection *c, const struct sophia_shell_frame *frame);
+bool bm_sophia_view_current(const struct bm_sophia_connection *c, unsigned slot,
+                           const struct sophia_shell_native_lifecycle_snapshot *state);
 #endif
