@@ -191,3 +191,26 @@ Cancelled permit reception now preserves in-flight candidate ownership; see
 Standing cancellation and wrong/duplicate grant terminals are covered. Session's
 late-record drain, actual removal/resource settlement and live close/reopen join
 remain required; these supplied-response controls do not mark that path complete.
+
+### Selected executable deployment boundary
+
+The optional native executable now links the existing menu core directly. The
+upstream libbemenu shared library and renderer-plugin targets still build the
+same core. Cairo/Pango and other system libraries remain dynamic; this is not a
+fully static binary. A selected shell executable must not need its whole build
+directory exposed in the protected domain just to find a sibling private library.
+
+A device-hidden Session test using the production ShellComponentLaunch and
+supervisor reproduced the old binary failing to load libbemenu.so.0 before
+negotiation. The rebuilt executable negotiates the native role and exact content
+grant with only that binary exposed. The executable private-socket regression
+also runs a relocated copy without sibling files. Full `make check-sophia
+EXTRA_WARNINGS=-Werror` passes in the device-hidden fixture; logs and exact inputs
+are in Sophia's `.artifacts/bemenu-standalone-link` and
+`.artifacts/bemenu-protected-join`.
+
+The protected test revokes/stops the connection immediately after negotiation;
+Bemenu may report the resulting transport EOF as service code 4. It proves
+protected admission and process reaping, not graceful UI close, actual catalog
+rendering, native presentation, or physical readiness. Those remain subsequent
+integration requirements.

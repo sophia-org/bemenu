@@ -3,12 +3,17 @@
 import os
 from pathlib import Path
 import socket
+import shutil
 import struct
 import subprocess
 import tempfile
 
 root = Path(__file__).resolve().parents[2]
-binary = root / 'bemenu-sophia'
+# Exercise the selected executable without sibling libbemenu/plugin files.
+# System Cairo/Pango remain shared; this is not a fully static executable.
+standalone = tempfile.TemporaryDirectory(prefix='bemenu-executable-')
+binary = Path(standalone.name) / 'bemenu-sophia'
+shutil.copy2(root / 'bemenu-sophia', binary)
 env = dict(os.environ)
 for key in ('SOPHIA_SHELL_SOCKET', 'DISPLAY', 'WAYLAND_DISPLAY', 'WAYLAND_SOCKET', 'BEMENU_BACKEND', 'BEMENU_RENDERER'):
     env.pop(key, None)
@@ -84,3 +89,4 @@ for mode in ('reopen', 'wrong_revision', 'startup_timeout'):
                     child.kill()
                     child.communicate(timeout=2)
 print('bemenu_executable private_socket=pass openings=2 startup_timeout=pass native=false')
+standalone.cleanup()

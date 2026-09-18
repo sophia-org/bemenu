@@ -89,8 +89,10 @@ clean-sophia:
 	rm -f bemenu-sophia bemenu-renderer-sophia.so .artifacts/sophia-connection-test .artifacts/sophia-native-lifecycle-test .artifacts/sophia-outbox-test .artifacts/sophia-upload-test .artifacts/sophia-limits-codec-test .artifacts/sophia-feedback-codec-test .artifacts/sophia-resource-codec-test .artifacts/sophia-native-codec-test .artifacts/sophia-catalog-menu-test .artifacts/sophia-raster-test .artifacts/sophia-catalog-test .artifacts/sophia-native-wire-test
 
 # Dedicated persistent native client; does not use stdin or the one-shot runner.
+# Link the same menu core into the selected executable: the protected launcher
+# exposes that file, not its build directory or a sibling private shared library.
 bemenu-sophia: private override CPPFLAGS += $(SOPHIA_INCLUDES)
-bemenu-sophia: lib/renderers/sophia/main.c $(SOPHIA_SOURCES) $(SOPHIA_HEADERS) util.a | libbemenu.so
-	$(LINK.c) $(filter %.c %.a,$^) $(SOPHIA_LIBS) -L. -lbemenu -Wl,-rpath,'$$ORIGIN' -o $@
+bemenu-sophia: lib/renderers/sophia/main.c $(SOPHIA_SOURCES) $(SOPHIA_HEADERS) lib/bemenu.h lib/internal.h $(BEMENU_CORE) scripts/sophia.mk
+	$(LINK.c) $(filter %.c %.a,$^) $(SOPHIA_LIBS) -ldl -o $@
 
 check-sophia: bemenu-sophia
