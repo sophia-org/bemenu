@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "repository": "https://github.com/sophia-org/sophia-stack",
-  "commit": "dfaf885ee1ea31e6955aea3afffcb7e435894acc",
+  "commit": "d6267e6c8690f90327280c3daf5da161743d8589",
   "license": "BSD-3-Clause",
   "files": {
     "sophia_shell_wire.h": {
@@ -75,6 +75,26 @@
     "tests/sophia_shell_wire_native_codec_test.c": {
       "source": "bindings/c/tests/sophia_shell_wire_native_codec_test.c",
       "sha256": "d66212318d0a4f7d17a09e82920309fa765f8e44c862061304797afa29ee24cb"
+    },
+    "sophia_shell_content_resource.h": {
+      "source": "bindings/c/sophia_shell_content_resource.h",
+      "sha256": "8f977523a1b205e734739ef91111378b930633bc0710d96f97d486c5cb1745be"
+    },
+    "sophia_shell_content_types.h": {
+      "source": "bindings/c/sophia_shell_content_types.h",
+      "sha256": "ca4e9d9fbba8b7fdffef8a0749f55e61d40c847ae1967467e6ee6adcad8faf52"
+    },
+    "shell_wire/content_resource.c": {
+      "source": "bindings/c/shell_wire/content_resource.c",
+      "sha256": "fdf4880bd548a4693e9980300b88e393bfbf7dfe9725ac3263fed5119b001d38"
+    },
+    "tests/sophia_shell_wire_resource_test.c": {
+      "source": "bindings/c/tests/sophia_shell_wire_resource_test.c",
+      "sha256": "3348a0364bb81fefdcb9c3b3ac9c95da51290431327730ec346f2ddce644a1be"
+    },
+    "sophia-shell-content.frames": {
+      "source": "protocol/golden/sophia-shell-content.frames",
+      "sha256": "eb925c42a16b5e2479bb52e7cc5d601554bded4a1f8dfe1f3d109e04c1675f34"
     }
   }
 }

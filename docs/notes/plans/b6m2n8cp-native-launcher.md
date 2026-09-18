@@ -35,7 +35,7 @@ grant-scoped compositor node identity. The existing single-shell transport now
 uses that implementation through its compatibility facade. Session still needs
 multi-component construction and routing; this is not native admission.
 
-This fork pins Sophia's public C sources at `dfaf885ee1ea31e6955aea3afffcb7e435894acc` in `vendor/sophia-shell`,
+This fork pins Sophia's public C sources at `d6267e6c8690f90327280c3daf5da161743d8589` in `vendor/sophia-shell`,
 including their BSD license, exact upstream paths and SHA-256 manifest. The
 optional renderer compiles these sources without Rust or a Sophia checkout.
 `make check-sophia` verifies the manifest and runs the independent typed catalog
@@ -87,3 +87,11 @@ ACK/activation encoders and six inbound native record decoders. This bridge is
 not the current presented model: later lifecycle code must copy exact row
 identities into candidate/presented state and retain protocol obligations without
 holding mutable menu items. Constructor enablement remains pending that join.
+
+
+The pin also includes shared content-resource transfer and reply codecs, including
+canonical whole-row Begin validation and bounded chunk copying. The resource
+corpus runs in `check-sophia`. These functions neither retain pixels nor advance
+resource generations; those duties remain with the client lifecycle owner, along
+with negotiated limits and exact transaction matching. A failed Retire must not
+be mistaken for ResourceReleased.
