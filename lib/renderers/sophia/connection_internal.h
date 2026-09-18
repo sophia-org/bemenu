@@ -21,6 +21,7 @@ struct bm_sophia_deadline {
 struct bm_sophia_connection {
     enum bm_sophia_timeout timeout;
     uint64_t write_progress;
+    unsigned displayed;
     struct bm_sophia_deadline deadlines[BM_SOPHIA_TIMEOUT_COUNT];
     struct bm_menu *menu;
     int fd, terminal;

@@ -112,7 +112,7 @@ bm_sophia_connection_inspect(const struct bm_sophia_connection *c,
         .timeout = c->timeout, .welcomed = c->welcomed, .content = c->content, .catalog = c->model.generation != 0,
         .lifecycle = c->native != NULL, .connection_epoch = c->welcome.connection_epoch,
         .catalog_generation = c->model.generation, .facts_generation = c->facts.generation,
-        .queued_records = c->outbox.count, .queued_bytes = c->outbox.bytes,
+        .displayed = c->displayed, .queued_records = c->outbox.count, .queued_bytes = c->outbox.bytes,
     };
     if (c->native && sophia_shell_native_lifecycle_inspect(c->native, &v.native) != SOPHIA_SHELL_OK)
         return false;

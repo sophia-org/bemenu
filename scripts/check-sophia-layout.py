@@ -4,6 +4,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent
 paths = [*root.glob("lib/renderers/sophia/*.[ch]"), *root.glob("tests/sophia/*.[ch]")]
+paths.extend(root.glob("tests/sophia/*.py"))
 paths.extend(root.glob("vendor/sophia-shell/**/*.c"))
 paths.extend(root.glob("vendor/sophia-shell/**/*.h"))
 for path in paths:

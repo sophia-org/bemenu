@@ -18,7 +18,7 @@ struct bm_sophia_connection_snapshot {
     enum bm_sophia_timeout timeout;
     bool welcomed, content, catalog, lifecycle;
     uint64_t connection_epoch, catalog_generation, facts_generation;
-    unsigned queued_records;
+    unsigned queued_records, displayed;
     size_t queued_bytes;
     struct sophia_shell_native_lifecycle_snapshot native;
 };

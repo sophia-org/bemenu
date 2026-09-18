@@ -23,6 +23,7 @@ static int stage_view(struct bm_sophia_connection *c, const struct sophia_shell_
         c->allocation.scale_numerator,c->allocation.scale_denominator,
         view.data,(size_t)view.stride*view.height,&slot);
     if (r != SOPHIA_SHELL_OK) return r;
+    c->displayed = view.row_count + 1; /* Upstream count includes the filter row. */
     view.data = NULL; /* The upload owner now holds the immutable copy. */
     c->views[slot] = (struct bm_sophia_uploaded_view){true,state->opening.opening,state->state_revision,
         c->facts.generation,c->allocation.allocation,view};

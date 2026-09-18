@@ -208,3 +208,33 @@ retains its corresponding owner; repeated healthy idle visits remain valid.
 Activation/revocation guard placement is source coverage here, not an exercised
 native activation or real server revocation timeout. Explicit cancellation races,
 persistent executable startup and live Session orchestration remain open.
+
+## Persistent native executable
+
+`make sophia` now builds `bemenu-sophia` as well as the optional renderer module.
+The dedicated executable accepts `--serve` and uses only the explicit absolute
+`SOPHIA_SHELL_SOCKET`. It checks a same-user filesystem socket and connected peer,
+uses nonblocking/CLOEXEC transport, and bounds pending connect. These checks do
+not attest confinement: Session remains responsible for protected launch and
+admission. The renderer module constructor stays disabled; the native executable
+uses a private empty libbemenu menu without discovering display plugins or reading
+stdin. It keeps normal menu/filter/Cairo behavior, four rows and default styling.
+Its displayed-count callback uses the captured view count for page navigation.
+
+One event loop drives the existing connection owner, using readiness and bounded
+20ms visits. Returned BUSY has a 10ms backoff even if more peer data is readable,
+so an unconsumed admission-refused frame cannot create a readiness spin. SIGTERM
+and SIGINT stop the loop; the descriptor closes before connection/menu disposal.
+Unexpected protocol/I/O/timeout failure exits nonzero with a bounded stage/code
+record. Negotiated is reported once and is not called protected or presented.
+There is no application exec, clipboard helper, reconnection loop or ambient
+X11/Wayland fallback. Session owns process restart and application activation.
+
+The actual binary is exercised by `tests/sophia/executable.py` inside the
+device-hidden project gate. A private Unix listener checks Hello, supplies
+revision-7 welcome/limits/catalog/facts, observes two actual allocation requests
+across openings with supplied refusals, then terminates the child. Missing endpoint
+and unknown argument refuse; wrong revision and a silent-peer startup timeout
+exit nonzero. This is process/socket/event-loop evidence, not protected admission,
+resource presentation, child application launch or live Session integration.
+Final evidence: Sophia `.artifacts/bemenu-executable-bounded`.

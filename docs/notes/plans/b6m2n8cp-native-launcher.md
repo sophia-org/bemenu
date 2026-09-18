@@ -177,3 +177,11 @@ preserving owners for disconnect; healthy idle remains unbounded. See the
 [deadline evidence and limits](../concepts/d7w2q8nr-one-connection-native-dispatch.md#pending-obligation-failure-guards).
 These guards do not replace server cancellation/revocation or establish a native
 latency target. The persistent event loop must drive them before physical readiness.
+
+The persistent `bemenu-sophia --serve` executable now drives the connection owner;
+[entry-point evidence](../concepts/d7w2q8nr-one-connection-native-dispatch.md#persistent-native-executable)
+covers the real process against a private listener. It deliberately receives its
+catalog only through Session, never stdin/application paths. No live profile or
+installation was changed. Next critical join is protected Session supervision,
+independent native opening/catalog/focus/content service alongside Lom, exact
+cleanup/cancellation ordering, then the combined offline and physical-run harness.

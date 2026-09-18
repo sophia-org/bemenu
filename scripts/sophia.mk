@@ -1,5 +1,5 @@
 .PHONY: sophia check-sophia clean-sophia
-sophia: bemenu-renderer-sophia.so
+sophia: bemenu-renderer-sophia.so bemenu-sophia
 
 SOPHIA_WIRE = $(wildcard vendor/sophia-shell/shell_wire/*.c)
 SOPHIA_SOURCES = lib/renderers/sophia/connection.c lib/renderers/sophia/connection_receive.c lib/renderers/sophia/connection_allocation.c lib/renderers/sophia/connection_schedule.c lib/renderers/sophia/connection_frames.c lib/renderers/sophia/connection_deadlines.c lib/renderers/sophia/view.c lib/renderers/sophia/catalog.c lib/renderers/sophia/input.c lib/renderers/sophia/raster.c $(SOPHIA_WIRE)
@@ -81,8 +81,16 @@ check-sophia: sophia .artifacts/sophia-connection-test .artifacts/sophia-native-
 	.artifacts/sophia-limits-codec-test vendor/sophia-shell/sophia-shell-content.frames
 	.artifacts/sophia-feedback-codec-test vendor/sophia-shell/sophia-shell-content.frames
 	python3 scripts/check-sophia-layout.py
+	python3 tests/sophia/executable.py
 	env -u DISPLAY -u WAYLAND_DISPLAY -u WAYLAND_SOCKET BEMENU_BACKEND=sophia BEMENU_RENDERER=$(CURDIR)/bemenu-renderer-sophia.so LD_LIBRARY_PATH=$(CURDIR) .artifacts/sophia-raster-test
 
 clean: clean-sophia
 clean-sophia:
-	rm -f bemenu-renderer-sophia.so .artifacts/sophia-connection-test .artifacts/sophia-native-lifecycle-test .artifacts/sophia-outbox-test .artifacts/sophia-upload-test .artifacts/sophia-limits-codec-test .artifacts/sophia-feedback-codec-test .artifacts/sophia-resource-codec-test .artifacts/sophia-native-codec-test .artifacts/sophia-catalog-menu-test .artifacts/sophia-raster-test .artifacts/sophia-catalog-test .artifacts/sophia-native-wire-test
+	rm -f bemenu-sophia bemenu-renderer-sophia.so .artifacts/sophia-connection-test .artifacts/sophia-native-lifecycle-test .artifacts/sophia-outbox-test .artifacts/sophia-upload-test .artifacts/sophia-limits-codec-test .artifacts/sophia-feedback-codec-test .artifacts/sophia-resource-codec-test .artifacts/sophia-native-codec-test .artifacts/sophia-catalog-menu-test .artifacts/sophia-raster-test .artifacts/sophia-catalog-test .artifacts/sophia-native-wire-test
+
+# Dedicated persistent native client; does not use stdin or the one-shot runner.
+bemenu-sophia: private override CPPFLAGS += $(SOPHIA_INCLUDES)
+bemenu-sophia: lib/renderers/sophia/main.c $(SOPHIA_SOURCES) $(SOPHIA_HEADERS) util.a | libbemenu.so
+	$(LINK.c) $(filter %.c %.a,$^) $(SOPHIA_LIBS) -L. -lbemenu -Wl,-rpath,'$$ORIGIN' -o $@
+
+check-sophia: bemenu-sophia
