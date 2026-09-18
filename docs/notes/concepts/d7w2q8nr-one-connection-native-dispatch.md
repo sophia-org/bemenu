@@ -156,3 +156,28 @@ Removing the connection's candidate-transaction guard alone does **not** defeat
 the test: the generic lifecycle independently refuses the mismatch. That surviving
 mutation is recorded as redundant-defense evidence, not a fourth mutation kill.
 The disposable source was restored and its full project gate passed again.
+
+## Reopening preserves the old owners
+
+Closed only disarms the old view. The connection keeps the granted allocation
+until its exact server revocation, and keeps retiring upload bytes until Released.
+A later Opening does not reuse that allocation or reactivate its old presentation.
+After revocation, the new request and raster carry the new opening and allocation;
+the second upload slot can progress while the old resource still awaits release.
+A retained permit for a different output/allocation waits for server expiry rather
+than being offered against the replacement allocation. The offer boundary also
+checks the same identities defensively.
+
+The actual connection/private-socket fixture now opens twice while the first
+resource is held in ReleasePending. It proves no early allocation request, exact
+revocation enabling the new request, separate copied origins and resource IDs,
+new upload progress, and old release settling only its own slot. A separate order
+closes and reopens while a candidate is pending, then supplies that old candidate's
+Prepared and Presented: both obligations drain, but the new opening remains
+unpresented/unfocused and the old resource retires. Server outcomes are supplied;
+this is not evidence of Session automatically revoking on close.
+
+Evidence is Sophia `.artifacts/bemenu-reopen-final`. The live Session owner must
+still orchestrate allocation revocation/candidate disposition and keep servicing
+resources while closed. Explicit cancellation races and bounded failure deadlines
+remain open. No socket on the desktop, display/device, or native worker was used.

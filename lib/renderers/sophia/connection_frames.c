@@ -98,7 +98,11 @@ int bm_sophia_frame_service(struct bm_sophia_connection *c,
     if (c->demand_pending) {
         /* TTL starts no earlier than our enqueue. Using receipt+TTL would
          * incorrectly add inbound queue delay to the server's lifetime. */
-        if (!c->permit_ready || c->now_msec-c->demand_started >= c->permit.ttl_ms)
+        if (!c->permit_ready || c->now_msec-c->demand_started >= c->permit.ttl_ms ||
+            c->demand.output.id != c->allocation.output.id ||
+            c->demand.output.generation != c->allocation.output.generation ||
+            c->demand.allocation.id != c->allocation.allocation.id ||
+            c->demand.allocation.generation != c->allocation.allocation.generation)
             return SOPHIA_SHELL_AGAIN;
     }
     for (unsigned i = 0; i < SOPHIA_SHELL_UPLOAD_SLOTS; ++i) {

@@ -165,3 +165,9 @@ records conservative rectangular semantics and actual pixel checks. This closes
 the previously explicit raw-background target gap for the current painter.
 Cancellation/expiry, reopen/topology and deadlines still require controller work,
 followed by executable and live Session integration before `lom-test` readiness.
+
+Reopen controls now retain old allocation/resource/candidate ownership across a
+new Opening, including late old Prepared/Presented and a held Released response.
+See [reopening ownership](../concepts/d7w2q8nr-one-connection-native-dispatch.md#reopening-preserves-the-old-owners).
+Server close-to-revoke orchestration and idle cleanup servicing still need the
+live Session join; these supplied-outcome tests do not complete that requirement.

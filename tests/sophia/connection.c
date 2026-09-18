@@ -321,10 +321,26 @@ static void automatic_allocation_and_upload(unsigned mode)
         assert(connection->candidate_active && !connection->shown_valid && !inspect().native.presented);
         free(expected); teardown(); return;
     }
+    if (mode == 5) {
+        uint8_t closed[28] = {0}; grant(closed); shell_put64(closed+16,1); shell_put16(closed+24,11);
+        send_frame(197,90,closed,sizeof(closed));
+        uint8_t next[56] = {0}; grant(next); shell_put64(next+16,2); shell_put64(next+24,2);
+        shell_put64(next+32,7); shell_put64(next+40,9); shell_put64(next+48,1);
+        send_frame(187,91,next,sizeof(next)); tick();
+        assert(inspect().native.opening.opening == 2 && connection->candidate_active);
+    }
     send_frame(175,candidate_tx,outcome,sizeof(outcome)); tick();
     assert(connection->candidate_active && !connection->shown_valid && !inspect().native.presented);
     shell_put16(outcome+40,2); shell_put64(outcome+44,10);
     send_frame(175,candidate_tx,outcome,sizeof(outcome)); tick();
+    if (mode == 5) {
+        assert(!connection->candidate_active && !connection->shown_valid && !inspect().native.presented);
+        assert(inspect().native.opening.opening == 2 && !inspect().native.focused);
+        struct sophia_shell_frame retired = client_record();
+        assert(retired.kind == 170 && !memcmp(retired.payload,key,sizeof(key)));
+        assert(sophia_shell_upload_inspect(connection->upload,0,&upload) == 0 && upload.state == SOPHIA_UPLOAD_RELEASE_PENDING);
+        free(expected); teardown(); return;
+    }
     assert(!connection->candidate_active && connection->shown_valid && connection->shown_slot == 0);
     assert(inspect().native.presented && !inspect().native.focused);
     assert(sophia_shell_upload_inspect(connection->upload,0,&upload) == 0 && upload.state == SOPHIA_UPLOAD_RESIDENT);
@@ -339,6 +355,31 @@ static void automatic_allocation_and_upload(unsigned mode)
     assert(connection->views[0].valid && connection->retire_slot[0]);
     assert(sophia_shell_upload_inspect(connection->upload,0,&upload) == 0 && upload.state == SOPHIA_UPLOAD_RELEASE_PENDING);
     uint8_t released[34] = {0}; memcpy(released,key,sizeof(key));
+    if (mode == 0) {
+        /* Closed disarms input but is not an allocation/resource release. A
+         * new opening waits for the old allocation's exact revocation. */
+        uint8_t next[56] = {0}; grant(next); shell_put64(next+16,2); shell_put64(next+24,2);
+        shell_put64(next+32,7); shell_put64(next+40,9); shell_put64(next+48,1);
+        send_frame(187,91,next,sizeof(next)); tick();
+        assert(inspect().native.open && inspect().native.opening.opening == 2);
+        assert(connection->allocation_valid && connection->allocation_opening == 1 && !connection->outbox.count);
+        assert(!connection->views[1].valid && !inspect().native.presented);
+        uint8_t revoked[160]; allocation_payload(revoked);
+        shell_put64(revoked+16,0); shell_put16(revoked+24,4); shell_put16(revoked+26,9);
+        send_frame(164,92,revoked,sizeof(revoked)); tick();
+        struct sophia_shell_frame fresh = client_record();
+        assert(fresh.kind == 188 && shell_get64(fresh.payload+16) == 2 && shell_get64(fresh.payload+40) == 2);
+        uint64_t allocation_tx = fresh.transaction;
+        allocation_payload(revoked); shell_put64(revoked+16,2); shell_put64(revoked+48,5);
+        send_frame(164,allocation_tx,revoked,sizeof(revoked)); tick();
+        assert(connection->allocation_valid && connection->allocation_opening == 2);
+        assert(connection->views[1].valid && connection->views[1].opening == 2);
+        assert(connection->views[1].allocation.id == 5 && connection->views[0].allocation.id == 4);
+        struct sophia_shell_frame second = client_record();
+        assert(second.kind == 165 && shell_get64(second.payload+16) != shell_get64(key+16));
+        assert(sophia_shell_upload_inspect(connection->upload,0,&upload) == 0 && upload.state == SOPHIA_UPLOAD_RELEASE_PENDING);
+        assert(!inspect().native.presented); /* An old displayed image cannot rearm the new opening. */
+    }
     send_frame(171,retire.transaction+(mode == 3),released,sizeof(released));
     if (mode == 3) {
         assert(bm_sophia_connection_service_at(connection,now_msec++) == SOPHIA_SHELL_INVALID);
@@ -408,7 +449,7 @@ int main(int argc, char **argv)
     }
     fclose(f); assert(found);
     real_menu_input(); bounded_catalog_and_order(); retained_catalog_end();
-    for (unsigned mode = 0; mode < 5; ++mode) automatic_allocation_and_upload(mode);
+    for (unsigned mode = 0; mode < 6; ++mode) automatic_allocation_and_upload(mode);
     allocation_refusal_and_identity();
     fractional_allocation_origin();
     puts("bemenu_connection fifo=pass real_menu=pass supplied_presentation=true native=false");
