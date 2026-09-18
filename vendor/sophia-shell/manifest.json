@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "repository": "https://github.com/sophia-org/sophia-stack",
-  "commit": "8148614707f6219c68f794583a5fd1c048ac626c",
+  "commit": "2c2f90f9bc6267ff7d70885bc0d6c1dd98e8e8ed",
   "license": "BSD-3-Clause",
   "files": {
     "sophia_shell_wire.h": {
@@ -127,6 +127,30 @@
     "tests/sophia_shell_wire_feedback_test.c": {
       "source": "bindings/c/tests/sophia_shell_wire_feedback_test.c",
       "sha256": "048331b5b76fc7e478d329c7e93b311c149820f5c5a49aa0cc0403c22ce7bc9d"
+    },
+    "sophia_shell_outbox.h": {
+      "source": "bindings/c/sophia_shell_outbox.h",
+      "sha256": "4e77cd725dd3ddde47c4ae1e1bcb3f2ccb31a995c1f3129bc1d6139bee5d552d"
+    },
+    "sophia_shell_upload.h": {
+      "source": "bindings/c/sophia_shell_upload.h",
+      "sha256": "0f544bdc35f3a65b1a044173e305173d72931fa5239a2dfb7e7db0805b11d6c0"
+    },
+    "shell_wire/outbox.c": {
+      "source": "bindings/c/shell_wire/outbox.c",
+      "sha256": "358f31fd37970a16e0267a55cac1ba4009632a3f9cd80578d1bcbdfbadb12fd8"
+    },
+    "shell_wire/upload.c": {
+      "source": "bindings/c/shell_wire/upload.c",
+      "sha256": "fa36099de7a4b536e4a89696dff0f302c27550d78c1ae02c6bd0a32ba37463ac"
+    },
+    "tests/sophia_shell_wire_outbox_test.c": {
+      "source": "bindings/c/tests/sophia_shell_wire_outbox_test.c",
+      "sha256": "422c8802f79910a67f2cc1cd3e5b521e6ce9bc26548db7398e5adfac12565e21"
+    },
+    "tests/sophia_shell_wire_upload_test.c": {
+      "source": "bindings/c/tests/sophia_shell_wire_upload_test.c",
+      "sha256": "f9602b82a15992415790595c15116fadf19ede6b9e3fc45365159f1f384f9d2f"
     }
   }
 }

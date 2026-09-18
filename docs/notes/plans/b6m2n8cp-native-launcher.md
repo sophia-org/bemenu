@@ -35,7 +35,7 @@ grant-scoped compositor node identity. The existing single-shell transport now
 uses that implementation through its compatibility facade. Session still needs
 multi-component construction and routing; this is not native admission.
 
-This fork pins Sophia's public C sources at `d6267e6c8690f90327280c3daf5da161743d8589` in `vendor/sophia-shell`,
+This fork pins Sophia's public C sources at `2c2f90f9bc6267ff7d70885bc0d6c1dd98e8e8ed` in `vendor/sophia-shell`,
 including their BSD license, exact upstream paths and SHA-256 manifest. The
 optional renderer compiles these sources without Rust or a Sophia checkout.
 `make check-sophia` verifies the manifest and runs the independent typed catalog
@@ -107,3 +107,15 @@ bounds only. Presented/focus ownership, permit consumption, paired reply enqueue
 immutable raster retention and exact release/generation reuse still require the
 client state machine. The renderer constructor remains disabled until that join;
 this pin does not establish a usable native launcher or physical-run readiness.
+
+
+The reusable client pin now includes the sole-writer owned FIFO and immutable
+resource upload owner. ACK/activation pairs enter atomically under one byte and
+record budget with reserved control capacity. Two copied-raster slots enforce
+negotiated bounds; IDs/generations advance only when Begin is owned, and retiring
+pixels remain owned until exact Released. Retire refusal preserves the resident
+resource. The vendored controls run in `check-sophia`: actual private-socket partial
+writes/backpressure and 1,000 pairs, plus 1,000 upload/release cycles while another
+actual raster allocation remains held. The upload server responses are supplied
+by the fixture, not the Session resource store. This does not establish Presented,
+focus, menu input effects, candidate bindings or supervised native startup.

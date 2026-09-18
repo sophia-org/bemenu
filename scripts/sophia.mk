@@ -40,15 +40,27 @@ bemenu-renderer-sophia.so: lib/renderers/sophia/sophia.c $(SOPHIA_SOURCES) $(SOP
 	mkdir -p .artifacts
 	$(LINK.c) $(filter %.c,$^) -o $@
 
+.artifacts/sophia-outbox-test: private override LDFLAGS += -Wl,--wrap=malloc -Wl,--wrap=free -Wl,--wrap=send
+.artifacts/sophia-outbox-test: vendor/sophia-shell/tests/sophia_shell_wire_outbox_test.c $(SOPHIA_WIRE) $(SOPHIA_HEADERS)
+	mkdir -p .artifacts
+	$(LINK.c) $(filter %.c,$^) -o $@
+
+.artifacts/sophia-upload-test: private override LDFLAGS += -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free
+.artifacts/sophia-upload-test: vendor/sophia-shell/tests/sophia_shell_wire_upload_test.c $(SOPHIA_WIRE) $(SOPHIA_HEADERS)
+	mkdir -p .artifacts
+	$(LINK.c) $(filter %.c,$^) -o $@
+
 .artifacts/sophia-catalog-menu-test: private override LDFLAGS += -Wl,--wrap=malloc -Wl,--wrap=calloc
 .artifacts/sophia-catalog-menu-test: private override CPPFLAGS += $(SOPHIA_INCLUDES)
 .artifacts/sophia-catalog-menu-test: tests/sophia/catalog.c $(SOPHIA_SOURCES) $(SOPHIA_HEADERS) util.a | libbemenu.so
 	mkdir -p .artifacts
 	$(LINK.c) $(filter %.c %.a,$^) $(SOPHIA_LIBS) -L. -lbemenu -o $@
 
-check-sophia: sophia .artifacts/sophia-limits-codec-test .artifacts/sophia-feedback-codec-test .artifacts/sophia-resource-codec-test .artifacts/sophia-native-codec-test .artifacts/sophia-catalog-menu-test .artifacts/sophia-raster-test .artifacts/sophia-catalog-test .artifacts/sophia-native-wire-test
+check-sophia: sophia .artifacts/sophia-outbox-test .artifacts/sophia-upload-test .artifacts/sophia-limits-codec-test .artifacts/sophia-feedback-codec-test .artifacts/sophia-resource-codec-test .artifacts/sophia-native-codec-test .artifacts/sophia-catalog-menu-test .artifacts/sophia-raster-test .artifacts/sophia-catalog-test .artifacts/sophia-native-wire-test
 	env LD_LIBRARY_PATH=$(CURDIR) .artifacts/sophia-catalog-menu-test
 	python3 scripts/check-sophia-vendor.py
+	.artifacts/sophia-outbox-test
+	.artifacts/sophia-upload-test vendor/sophia-shell/sophia-shell-content.frames
 	.artifacts/sophia-catalog-test vendor/sophia-shell/sophia-shell-launcher.frames
 	.artifacts/sophia-native-wire-test vendor/sophia-shell/sophia-shell-native-launcher.frames
 	.artifacts/sophia-native-codec-test vendor/sophia-shell/sophia-shell-native-launcher.frames
@@ -60,4 +72,4 @@ check-sophia: sophia .artifacts/sophia-limits-codec-test .artifacts/sophia-feedb
 
 clean: clean-sophia
 clean-sophia:
-	rm -f bemenu-renderer-sophia.so .artifacts/sophia-limits-codec-test .artifacts/sophia-feedback-codec-test .artifacts/sophia-resource-codec-test .artifacts/sophia-native-codec-test .artifacts/sophia-catalog-menu-test .artifacts/sophia-raster-test .artifacts/sophia-catalog-test .artifacts/sophia-native-wire-test
+	rm -f bemenu-renderer-sophia.so .artifacts/sophia-outbox-test .artifacts/sophia-upload-test .artifacts/sophia-limits-codec-test .artifacts/sophia-feedback-codec-test .artifacts/sophia-resource-codec-test .artifacts/sophia-native-codec-test .artifacts/sophia-catalog-menu-test .artifacts/sophia-raster-test .artifacts/sophia-catalog-test .artifacts/sophia-native-wire-test
