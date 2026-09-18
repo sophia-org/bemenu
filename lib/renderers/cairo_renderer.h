@@ -48,6 +48,14 @@ struct cairo_result {
     uint32_t x_advance;
     uint32_t height;
     uint32_t baseline;
+    /* Exact logical background box produced by draw_line_str. */
+    double x, y, width, box_height;
+};
+
+/* Optional observation of item draws. Does not own items or alter painting. */
+struct cairo_row_observer {
+    void (*row)(void *user, const struct bm_item *item, const struct cairo_result *box);
+    void *user;
 };
 
 struct cairo_paint_result {
@@ -144,11 +152,12 @@ bm_cairo_draw_line_str(struct cairo *cairo, struct cairo_paint *paint, struct ca
     int base = pango_layout_get_baseline(layout) / PANGO_SCALE;
 
     uint32_t line_height = height + paint->box.by + paint->box.ty;
+    result->x = paint->pos.x - paint->box.lx;
+    result->y = paint->pos.y - paint->box.ty;
+    result->width = (paint->box.w > 0 ? paint->box.w : width) + paint->box.rx + paint->box.lx;
+    result->box_height = line_height;
     cairo_set_source_rgba(cairo->cr, paint->bg.r, paint->bg.b, paint->bg.g, paint->bg.a);
-    cairo_rectangle(cairo->cr,
-            paint->pos.x - paint->box.lx, paint->pos.y - paint->box.ty,
-            (paint->box.w > 0 ? paint->box.w : width) + paint->box.rx + paint->box.lx,
-            line_height);
+    cairo_rectangle(cairo->cr, result->x, result->y, result->width, result->box_height);
     cairo_fill(cairo->cr);
 
     cairo_set_source_rgba(cairo->cr, paint->fg.r, paint->fg.b, paint->fg.g, paint->fg.a);
@@ -280,7 +289,8 @@ bm_cairo_rounded_path(cairo_t *cr, double x, double y, double width, double heig
 
 
 static inline void
-bm_cairo_paint(struct cairo *cairo, uint32_t width, uint32_t max_height, struct bm_menu *menu, struct cairo_paint_result *out_result)
+bm_cairo_paint_observed(struct cairo *cairo, uint32_t width, uint32_t max_height, struct bm_menu *menu,
+                       struct cairo_paint_result *out_result, const struct cairo_row_observer *observer)
 {
     assert(cairo && menu && out_result);
 
@@ -451,15 +461,20 @@ bm_cairo_paint(struct cairo *cairo, uint32_t width, uint32_t max_height, struct 
                 line_str = bm_cairo_entry_message(items[display_item_index]->text, highlighted, menu->event_feedback, i, count);
             }
 
+            bool drawn;
             if (menu->prefix && highlighted) {
                 paint.pos = (struct pos){ spacing_x + border_size, posy + vpadding + border_size };
                 paint.box = (struct box){ 4, 0, vpadding, -vpadding, width - paint.pos.x, height };
-                bm_cairo_draw_line(cairo, &paint, &result, "%s %s", menu->prefix, line_str);
+                drawn = bm_cairo_draw_line(cairo, &paint, &result, "%s %s", menu->prefix, line_str);
             } else {
                 paint.pos = (struct pos){ spacing_x + border_size, posy+vpadding + border_size };
                 paint.box = (struct box){ 4 + prefix_x, 0, vpadding, -vpadding, width - paint.pos.x, height };
-                bm_cairo_draw_line(cairo, &paint, &result, "%s", line_str);
+                drawn = bm_cairo_draw_line(cairo, &paint, &result, "%s", line_str);
             }
+
+            if (drawn && observer && observer->row && count &&
+                ((i < count && !is_fixed_up) || (is_fixed_up && display_item_index <= last_item_index)))
+                observer->row(observer->user, items[display_item_index], &result);
 
             posy += (spacing_y ? spacing_y : result.height);
             out_result->height = posy;
@@ -523,7 +538,9 @@ bm_cairo_paint(struct cairo *cairo, uint32_t width, uint32_t max_height, struct 
             uint32_t hpadding = (menu->hpadding == 0 ? 2 : menu->hpadding);
             paint.pos = (struct pos){ cl + (hpadding/2), vpadding + border_size };
             paint.box = (struct box){ hpadding/2, 1.5 * hpadding, vpadding, -vpadding, 0, height };
-            bm_cairo_draw_line(cairo, &paint, &result, "%s", (items[i]->text ? items[i]->text : ""));
+            bool drawn = bm_cairo_draw_line(cairo, &paint, &result, "%s", (items[i]->text ? items[i]->text : ""));
+            if (drawn && observer && observer->row)
+                observer->row(observer->user, items[i], &result);
             cl += result.x_advance + (0.5 * hpadding);
             out_result->displayed += (cl < width);
             out_result->height = fmax(out_result->height, result.height);
@@ -606,6 +623,13 @@ bm_cairo_paint(struct cairo *cairo, uint32_t width, uint32_t max_height, struct 
     out_result->height += 2 * border_size;
     out_result->height *= cairo->scale;
     cairo_reset_clip(cairo->cr);
+}
+
+static inline void
+bm_cairo_paint(struct cairo *cairo, uint32_t width, uint32_t max_height, struct bm_menu *menu,
+               struct cairo_paint_result *out_result)
+{
+    bm_cairo_paint_observed(cairo, width, max_height, menu, out_result, NULL);
 }
 
 #endif /* _BM_CAIRO_H */

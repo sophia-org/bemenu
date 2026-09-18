@@ -13,6 +13,31 @@ struct bm_sophia_raster {
     uint32_t width, height, stride;
 };
 
+struct row_capture {
+    struct bm_sophia_pixels *pixels;
+    double scale;
+    bool overflow;
+};
+
+static void
+capture_row(void *data, const struct bm_item *item, const struct cairo_result *box)
+{
+    struct row_capture *capture = data;
+    struct bm_sophia_pixels *pixels = capture->pixels;
+    /* Round endpoints independently, then intersect with the physical image. */
+    double x = fmax(0, floor(box->x * capture->scale));
+    double y = fmax(0, floor(box->y * capture->scale));
+    double right = fmin(pixels->width, ceil((box->x + box->width) * capture->scale));
+    double bottom = fmin(pixels->height, ceil((box->y + box->box_height) * capture->scale));
+    if (right <= x || bottom <= y)
+        return;
+    if (pixels->row_count == 32) {
+        capture->overflow = true;
+        return;
+    }
+    pixels->rows[pixels->row_count++] = (struct bm_sophia_painted_row){item, x, y, right - x, bottom - y};
+}
+
 struct bm_sophia_raster *
 bm_sophia_raster_new(uint32_t width, uint32_t height, double scale)
 {
@@ -71,17 +96,20 @@ bm_sophia_raster_paint(struct bm_sophia_raster *raster, struct bm_menu *menu,
     if (!metrics.height || metrics.height > raster->height / raster->painter.scale)
         return false;
 
+    struct bm_sophia_pixels next = {.width = raster->width, .height = raster->height};
+    struct row_capture capture = {&next, raster->painter.scale, false};
+    struct cairo_row_observer observer = {capture_row, &capture};
     struct cairo_paint_result result;
-    bm_cairo_paint(&raster->painter, raster->width, raster->height, menu, &result);
+    bm_cairo_paint_observed(&raster->painter, raster->width, raster->height, menu, &result, &observer);
     cairo_surface_flush(raster->painter.surface);
     if (cairo_status(raster->painter.cr) != CAIRO_STATUS_SUCCESS ||
-        cairo_surface_status(raster->painter.surface) != CAIRO_STATUS_SUCCESS)
+        cairo_surface_status(raster->painter.surface) != CAIRO_STATUS_SUCCESS || capture.overflow)
         return false;
-    *pixels = (struct bm_sophia_pixels){
-        .data = cairo_image_surface_get_data(raster->painter.surface),
-        .width = raster->width, .height = raster->height, .stride = raster->stride,
-        .content_height = result.height, .displayed = result.displayed,
-    };
+    next.data = cairo_image_surface_get_data(raster->painter.surface);
+    next.stride = raster->stride;
+    next.content_height = result.height;
+    next.displayed = result.displayed;
+    *pixels = next;
     return true;
 }
 

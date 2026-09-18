@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "repository": "https://github.com/sophia-org/sophia-stack",
-  "commit": "2c2f90f9bc6267ff7d70885bc0d6c1dd98e8e8ed",
+  "commit": "c2ff3fcdaf8eb0b57872bc5b7a879d854a44cc36",
   "license": "BSD-3-Clause",
   "files": {
     "sophia_shell_wire.h": {
@@ -130,7 +130,7 @@
     },
     "sophia_shell_outbox.h": {
       "source": "bindings/c/sophia_shell_outbox.h",
-      "sha256": "4e77cd725dd3ddde47c4ae1e1bcb3f2ccb31a995c1f3129bc1d6139bee5d552d"
+      "sha256": "1784848c3c3cabf194ad4a9adc1db4b7c2541e74d311ef8d369eee95ae4c40b6"
     },
     "sophia_shell_upload.h": {
       "source": "bindings/c/sophia_shell_upload.h",
@@ -138,7 +138,7 @@
     },
     "shell_wire/outbox.c": {
       "source": "bindings/c/shell_wire/outbox.c",
-      "sha256": "358f31fd37970a16e0267a55cac1ba4009632a3f9cd80578d1bcbdfbadb12fd8"
+      "sha256": "ac91a5c4b1b065d5e1b09e0e181ce44b97204b95fea657f6537202ebffe9f531"
     },
     "shell_wire/upload.c": {
       "source": "bindings/c/shell_wire/upload.c",
@@ -146,11 +146,31 @@
     },
     "tests/sophia_shell_wire_outbox_test.c": {
       "source": "bindings/c/tests/sophia_shell_wire_outbox_test.c",
-      "sha256": "422c8802f79910a67f2cc1cd3e5b521e6ce9bc26548db7398e5adfac12565e21"
+      "sha256": "e80e4b351979e1188492a44a60609da96f91225daea3413e87c7bf444297e956"
     },
     "tests/sophia_shell_wire_upload_test.c": {
       "source": "bindings/c/tests/sophia_shell_wire_upload_test.c",
       "sha256": "f9602b82a15992415790595c15116fadf19ede6b9e3fc45365159f1f384f9d2f"
+    },
+    "sophia_shell_native_lifecycle.h": {
+      "source": "bindings/c/sophia_shell_native_lifecycle.h",
+      "sha256": "812e70f1b9b9127b636923e8dce62400cee57c17c228a7d759404abf10452e1f"
+    },
+    "shell_wire/native_lifecycle.h": {
+      "source": "bindings/c/shell_wire/native_lifecycle.h",
+      "sha256": "d972f5ef242aa0a646a28ab70c06522c96a897a3bd627d8c5adb8681a0a4cdf6"
+    },
+    "shell_wire/native_lifecycle.c": {
+      "source": "bindings/c/shell_wire/native_lifecycle.c",
+      "sha256": "13d41ada48147dc85cc29791373ccc9752f52bf2f1e401fab21123fa278e76d2"
+    },
+    "shell_wire/native_input.c": {
+      "source": "bindings/c/shell_wire/native_input.c",
+      "sha256": "c7f7b988c40f9dd65ac5a3f98d26dc7ceb74d1aaa86e792e391be51fc83f2633"
+    },
+    "tests/sophia_shell_wire_native_lifecycle_test.c": {
+      "source": "bindings/c/tests/sophia_shell_wire_native_lifecycle_test.c",
+      "sha256": "061e781ff8f5252a50169e8576c618df90a286fda3b0f91e423448bb95cc378d"
     }
   }
 }

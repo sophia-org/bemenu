@@ -119,3 +119,15 @@ writes/backpressure and 1,000 pairs, plus 1,000 upload/release cycles while anot
 actual raster allocation remains held. The upload server responses are supplied
 by the fixture, not the Session resource store. This does not establish Presented,
 focus, menu input effects, candidate bindings or supervised native startup.
+
+
+The published C pin at `c2ff3fcd` adds exact native candidate/Presented/focus/input
+ownership and preallocated FIFO response reservations. The vendor gate executes
+its private-socket controls. The actual Cairo painter now exposes bounded observed
+row backgrounds, and the catalog/view adapter copies catalog slots and selection
+without retaining menu pointers. See [painted catalog views](../concepts/g8p2m4vr-painted-catalog-views.md)
+for controls and limits. The persistent controller must still join negotiation,
+allocation/permits, upload/release, these views and native candidate/input service.
+Final hit-target policy must handle painter decorations; the background observer
+is not a substitute for that policy. Live Session admission and attended
+acceptance remain open; `lom-test` is not ready from these component gates.

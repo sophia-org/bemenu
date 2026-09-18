@@ -1,5 +1,6 @@
 #include "internal.h"
 #include "renderers/sophia/catalog.h"
+#include "renderers/sophia/view.h"
 #include "../../vendor/sophia-shell/shell_wire/fields.h"
 #include <assert.h>
 #include <stdlib.h>
@@ -165,8 +166,48 @@ static void repeated_replacement(void)
     }
     assert(bm_sophia_catalog_clear(&model)); bm_menu_free(menu);
 }
+static void painted_catalog_identity(void)
+{
+    struct wire_fixture wire; init(&wire, 5);
+    struct bm_menu *menu = menu_new();
+    assert(bm_menu_set_font(menu, "DejaVu Sans 14"));
+    for (unsigned i = 0; i < BM_COLOR_LAST; ++i)
+        assert(bm_menu_set_color(menu, i, NULL));
+    bm_menu_set_lines(menu, 4);
+    struct bm_sophia_catalog_model model = {0};
+    assert(control(&wire, 114, 1, 2) == 0);
+    entry(&wire, 1, 7, "Browser", "web", true);
+    entry(&wire, 1, 3, "Editor", "code", true);
+    assert(control(&wire, 116, 1, 0) == 1);
+    assert(bm_sophia_catalog_install(&model, menu, &wire.catalog));
+    struct bm_sophia_raster *raster = bm_sophia_raster_new(640, 320, 1);
+    struct bm_sophia_view view;
+    assert(raster && bm_sophia_view_capture(raster, &model, &view));
+    assert(view.connection_epoch == 5 && view.catalog_generation == 1);
+    assert(view.row_count == 2 && view.rows[0].slot == 7 && view.rows[1].slot == 3 && view.selected == 7);
+    size_t bytes = (size_t)view.stride * view.height;
+    unsigned char *old_pixels = malloc(bytes); assert(old_pixels); memcpy(old_pixels, view.data, bytes);
+    assert(bm_sophia_view_edit(menu, 9, NULL, 0));
+    assert(bm_sophia_view_capture(raster, &model, &view) && view.selected == 3);
+    assert(memcmp(old_pixels, view.data, bytes));
+    struct bm_sophia_view old = view;
+    assert(bm_sophia_view_edit(menu, 1, (const uint8_t *)"web", 3));
+    assert(bm_sophia_view_capture(raster, &model, &view));
+    assert(view.row_count == 1 && view.rows[0].slot == 7 && view.selected == 7);
+    assert(!bm_sophia_view_edit(menu, 17, NULL, 0)); /* Accept is protocol-owned. */
+    assert(control(&wire, 114, 2, 1) == 0);
+    entry(&wire, 2, 4096, "New Browser", "web", true);
+    assert(control(&wire, 116, 2, 0) == 1 && bm_sophia_catalog_install(&model, menu, &wire.catalog));
+    assert(bm_sophia_view_capture(raster, &model, &view));
+    assert(view.catalog_generation == 2 && view.row_count == 1 && view.selected == 4096);
+    assert(old.catalog_generation == 1 && old.rows[0].slot == 7 && old.rows[1].slot == 3 && old.selected == 3);
+    /* Row identity is copied, not a dangling menu pointer after replacement. */
+    assert(bm_sophia_catalog_clear(&model));
+    assert(!bm_sophia_view_capture(raster, &model, &view) && !view.data && !view.row_count);
+    free(old_pixels); bm_sophia_raster_free(raster); bm_menu_free(menu);
+}
 int main(void)
 {
-    catalog_menu(); foreign_menu(); refused_allocation(); repeated_replacement();
+    catalog_menu(); foreign_menu(); refused_allocation(); repeated_replacement(); painted_catalog_identity();
     return 0;
 }
