@@ -186,6 +186,34 @@ static void bounded_catalog_and_order(void)
     assert(bm_sophia_connection_service_at(connection,now_msec++) == SOPHIA_SHELL_INVALID && !inspect().welcomed);
     teardown();
 }
+
+static void fresh_opening_resets_query_only_after_validation(void)
+{
+    for (unsigned valid = 0; valid < 2; ++valid) {
+        setup(); welcome(); limits(); catalog(); opening();
+        /* Seed menu state directly; this control tests the opening transition,
+         * not receipt of a keyboard event or presentation of that query. */
+        bm_menu_set_filter(menu,"web"); bm_menu_filter(menu);
+        uint32_t count; bm_menu_get_filtered_items(menu,&count); assert(count == 1);
+        if (valid) {
+            uint8_t closed[28] = {0}; grant(closed); shell_put64(closed+16,1); shell_put16(closed+24,11);
+            send_frame(197,90,closed,sizeof(closed)); tick();
+        }
+        uint8_t next[56] = {0}; grant(next); shell_put64(next+16,valid ? 2 : 1);
+        shell_put64(next+24,2); shell_put64(next+32,7); shell_put64(next+40,9); shell_put64(next+48,1);
+        send_frame(187,91,next,sizeof(next));
+        if (valid) {
+            tick(); assert(!menu->filter && !menu->old_filter && !menu->cursor && !menu->index);
+            bm_menu_get_filtered_items(menu,&count); assert(count == 2);
+            assert(inspect().native.opening.opening == 2);
+        } else {
+            assert(bm_sophia_connection_service_at(connection,now_msec++) == SOPHIA_SHELL_INVALID);
+            assert(menu->filter && !strcmp(menu->filter,"web"));
+            assert(inspect().native.opening.opening == 1);
+        }
+        teardown();
+    }
+}
 static void retained_catalog_end(void)
 {
     setup(); welcome(); limits();
@@ -553,6 +581,7 @@ int main(int argc, char **argv)
     }
     fclose(f); assert(found);
     real_menu_input(); bounded_catalog_and_order(); retained_catalog_end();
+    fresh_opening_resets_query_only_after_validation();
     for (unsigned mode = 0; mode < 13; ++mode) automatic_allocation_and_upload(mode);
     allocation_refusal_and_identity();
     fractional_allocation_origin();

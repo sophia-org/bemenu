@@ -99,6 +99,14 @@ bm_sophia_connection_receive(struct bm_sophia_connection *c, const struct sophia
     if (!c->native) return SOPHIA_SHELL_INVALID;
     if (f->kind == 175)
         return bm_sophia_candidate_receive(c, f);
-    return sophia_shell_native_lifecycle_receive(c->native, f, &c->next_transaction,
+    int r = sophia_shell_native_lifecycle_receive(c->native, f, &c->next_transaction,
                                                 bm_sophia_view_edit, c->menu);
+    if (r == SOPHIA_SHELL_OK && f->kind == 187) {
+        /* A fresh validated opening starts a fresh query. These empty-filter
+         * operations allocate nothing; retained immutable uploads stay owned. */
+        bm_menu_set_filter(c->menu,NULL);
+        bm_menu_filter(c->menu);
+        bm_menu_set_highlighted_index(c->menu,0);
+    }
+    return r;
 }

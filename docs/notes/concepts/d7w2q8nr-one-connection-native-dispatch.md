@@ -332,3 +332,26 @@ approach under .artifacts/bemenu-font-bootstrap; it is not the implementation.
 This establishes confined CPU font/raster operation, not native presentation or
 font-installation support on every distribution. A system with no visible fonts
 is refused instead of rendering an unexplained empty launcher.
+
+## A new opening starts a fresh query
+
+The actual protected close/reopen control found that a newly admitted opening
+kept the previous app2 filter and showed one row instead of the full catalog.
+After the native lifecycle validates an Opening, the connection now clears the
+filter and its cached result and selects the first row. These empty-filter
+operations allocate nothing and do not release immutable old uploads. Duplicate,
+stale or otherwise refused Openings leave the live query untouched. No change
+to the public C lifecycle or Session validation is needed.
+
+The device-hidden C connection controls cover both valid reopen/reset and invalid
+opening/query preservation. The compiled mutation resetting after a refused
+opening fails the latter assertion. Full check-sophia passes. Sophia's actual
+protected C process now performs two openings in one connection: two-row raster,
+exact text ACK/one-row replacement, close and resource retirement blocked by a
+real held bundle, release/settlement, then a fresh two-row opening and final close.
+A separately protected Rust bar peer retains its connection and byte lease
+throughout. It is a bar protocol fixture, not Lom's GPU renderer. Allocations and
+presentation completions remain supplied; native pixel removal/KMS are untested.
+Evidence: Sophia .artifacts/bemenu-protected-join/reopen-final and
+.artifacts/bemenu-reopen-{query,unvalidated-mutant}. The original one-row reopen
+failure is retained in content-reopen-execution.log. No live run or installation.
