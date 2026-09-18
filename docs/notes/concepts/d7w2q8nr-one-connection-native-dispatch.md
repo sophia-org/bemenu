@@ -298,3 +298,37 @@ The protected pixel run also reports missing default Fontconfig configuration
 and unwritable cache directories. Rendering happened, but font configuration and
 stable text appearance inside the real confinement remain an open readiness
 item. Do not conceal those messages or count this result as font acceptance.
+
+## Native font configuration and private cache
+
+The standalone process now installs an explicit Fontconfig configuration before
+Pango use. It scans the already-visible system font roots /usr/share/fonts and
+/usr/local/share/fonts, requires at least one usable font, and preserves the
+generic monospace request using spacing rather than a distribution-specific
+family name. It neither loads host /etc/fonts/user settings nor adds sandbox
+mounts. The optional renderer plugin keeps its existing initialization behavior.
+Custom user-font admission and full user Fontconfig rules are not claimed.
+
+Each process owns a mode-0700 mkdtemp cache under /tmp (a private tmpfs in the
+production domain), retains an open directory descriptor, and removes flat
+cache entries without following child symlinks after menu/raster disposal.
+Unexpected directories or a bounded cleanup failure are reported as incomplete,
+not recursively traversed or called successful. Initialization failures run the
+same cleanup. The installed Fontconfig global remains a process-lifetime
+reference; this native-only bootstrap is not an API for replacing another UI's
+configuration mid-process. No home directory or shared host cache is required.
+The APIs follow the [Fontconfig developer reference](https://fontconfig.pages.freedesktop.org/fontconfig/fontconfig-devel/).
+
+The actual protected C-client catalog/text/pixel run now has no Fontconfig
+configuration/cache diagnostics. Device-hidden check-sophia passes, including
+actual font matching, empty/missing-font refusal, mode-0700 ownership,
+symlink-safe cleanup and explicit unexpected-directory failure. Compiled
+mutations removing empty-font refusal or cache unlinking fail those assertions.
+Evidence in Sophia: .artifacts/bemenu-native-fonts,
+.artifacts/bemenu-fonts-{no-fonts,cache-leak}-mutant and
+.artifacts/bemenu-protected-join/content-fonts-execution.log. The initial
+AppFontAddDir-only probe still emitted cache errors and is retained as a failed
+approach under .artifacts/bemenu-font-bootstrap; it is not the implementation.
+This establishes confined CPU font/raster operation, not native presentation or
+font-installation support on every distribution. A system with no visible fonts
+is refused instead of rendering an unexplained empty launcher.

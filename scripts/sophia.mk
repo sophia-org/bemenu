@@ -67,6 +67,13 @@ bemenu-renderer-sophia.so: lib/renderers/sophia/sophia.c $(SOPHIA_SOURCES) $(SOP
 	mkdir -p .artifacts
 	$(LINK.c) $(filter %.c %.a,$^) $(SOPHIA_LIBS) -L. -lbemenu -o $@
 
+.artifacts/sophia-fonts-test: private override CPPFLAGS += $(SOPHIA_INCLUDES)
+.artifacts/sophia-fonts-test: tests/sophia/fonts.c lib/renderers/sophia/fonts.c lib/renderers/sophia/fonts.h
+	mkdir -p .artifacts
+	$(LINK.c) $(filter %.c,$^) $(SOPHIA_LIBS) -o $@
+
+check-sophia: .artifacts/sophia-fonts-test
+
 check-sophia: sophia .artifacts/sophia-connection-test .artifacts/sophia-native-lifecycle-test .artifacts/sophia-outbox-test .artifacts/sophia-upload-test .artifacts/sophia-limits-codec-test .artifacts/sophia-feedback-codec-test .artifacts/sophia-resource-codec-test .artifacts/sophia-native-codec-test .artifacts/sophia-catalog-menu-test .artifacts/sophia-raster-test .artifacts/sophia-catalog-test .artifacts/sophia-native-wire-test
 	env LD_LIBRARY_PATH=$(CURDIR) .artifacts/sophia-connection-test vendor/sophia-shell/sophia-shell-content.frames
 	env LD_LIBRARY_PATH=$(CURDIR) .artifacts/sophia-catalog-menu-test
@@ -82,17 +89,19 @@ check-sophia: sophia .artifacts/sophia-connection-test .artifacts/sophia-native-
 	.artifacts/sophia-feedback-codec-test vendor/sophia-shell/sophia-shell-content.frames
 	python3 scripts/check-sophia-layout.py
 	python3 tests/sophia/executable.py
+	.artifacts/sophia-fonts-test
 	env -u DISPLAY -u WAYLAND_DISPLAY -u WAYLAND_SOCKET BEMENU_BACKEND=sophia BEMENU_RENDERER=$(CURDIR)/bemenu-renderer-sophia.so LD_LIBRARY_PATH=$(CURDIR) .artifacts/sophia-raster-test
 
 clean: clean-sophia
 clean-sophia:
+	rm -f .artifacts/sophia-fonts-test
 	rm -f bemenu-sophia bemenu-renderer-sophia.so .artifacts/sophia-connection-test .artifacts/sophia-native-lifecycle-test .artifacts/sophia-outbox-test .artifacts/sophia-upload-test .artifacts/sophia-limits-codec-test .artifacts/sophia-feedback-codec-test .artifacts/sophia-resource-codec-test .artifacts/sophia-native-codec-test .artifacts/sophia-catalog-menu-test .artifacts/sophia-raster-test .artifacts/sophia-catalog-test .artifacts/sophia-native-wire-test
 
 # Dedicated persistent native client; does not use stdin or the one-shot runner.
 # Link the same menu core into the selected executable: the protected launcher
 # exposes that file, not its build directory or a sibling private shared library.
 bemenu-sophia: private override CPPFLAGS += $(SOPHIA_INCLUDES)
-bemenu-sophia: lib/renderers/sophia/main.c $(SOPHIA_SOURCES) $(SOPHIA_HEADERS) lib/bemenu.h lib/internal.h $(BEMENU_CORE) scripts/sophia.mk
+bemenu-sophia: lib/renderers/sophia/main.c lib/renderers/sophia/fonts.c lib/renderers/sophia/fonts.h $(SOPHIA_SOURCES) $(SOPHIA_HEADERS) lib/bemenu.h lib/internal.h $(BEMENU_CORE) scripts/sophia.mk
 	$(LINK.c) $(filter %.c %.a,$^) $(SOPHIA_LIBS) -ldl -o $@
 
 check-sophia: bemenu-sophia

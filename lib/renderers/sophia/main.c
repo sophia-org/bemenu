@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include "internal.h"
 #include "connection.h"
+#include "fonts.h"
 #include <errno.h>
 #include <poll.h>
 #include <signal.h>
@@ -98,10 +99,14 @@ int main(int argc, char **argv)
     if (sigaction(SIGTERM,&action,NULL) || sigaction(SIGINT,&action,NULL)) return 1;
     int fd = connect_endpoint(getenv("SOPHIA_SHELL_SOCKET"));
     if (fd < 0) {fputs("bemenu_native status=failed stage=connect\n",stderr); return 1;}
+    const char *const font_directories[] = {"/usr/share/fonts", "/usr/local/share/fonts"};
+    struct bm_sophia_fonts *fonts = bm_sophia_fonts_new(font_directories,2);
+    if (!fonts) {close(fd); fputs("bemenu_native status=failed stage=fonts\n",stderr); return 1;}
     struct bm_menu *menu = native_menu();
     struct bm_sophia_connection *connection = NULL;
     if (!menu || bm_sophia_connection_new(menu,fd,&connection) != SOPHIA_SHELL_OK) {
         close(fd); if (menu) bm_menu_free(menu);
+        if (!bm_sophia_fonts_free(fonts)) fputs("bemenu_native status=failed stage=font_cache_cleanup\n",stderr);
         fputs("bemenu_native status=failed stage=initialize\n",stderr); return 1;
     }
     menu->userdata = connection;
@@ -132,6 +137,9 @@ int main(int argc, char **argv)
     close(fd); /* End the connection before freeing local owners. */
     menu->userdata = NULL;
     bm_sophia_connection_dispose(connection); bm_menu_free(menu);
+    if (!bm_sophia_fonts_free(fonts)) {
+        fputs("bemenu_native status=failed stage=font_cache_cleanup\n",stderr); result = 1;
+    }
     fprintf(stderr,"bemenu_native status=stopped result=%d\n",result);
     return result;
 }
