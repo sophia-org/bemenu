@@ -268,3 +268,33 @@ The Session permit producer also needed transaction correlation repaired:
 Sophia `563ee23b` echoes the demand transaction rather than minting an unrelated
 server transaction. Neither fix completes native Session close/removal/reopen
 or authorizes a physical run. The live join and `lom-test` gate remain pending.
+
+## Interaction authority is not a redraw counter
+
+The first actual protected Bemenu-to-Sophia text roundtrip exposed a mismatch:
+Bemenu incremented interaction_generation on each offer, but the current live
+Session content profile checks that field against 1 for the connected grant.
+The first candidate passed; the replacement after typing was rejected stale and
+never became presented. Native query state_revision, candidate_generation and
+target_generation already identify edits, complete replacements and target
+versions separately. Bemenu now keeps the current profile's interaction value
+at 1 and increments its separately named target_counter for target versions.
+This matches the existing panel client/profile; it does not weaken Session's
+stale-context validation or redefine a rendered revision as input authority.
+
+The real protected-process control receives the actual published two-entry
+catalog, uploads Cairo pixels into real resource/candidate stores, receives
+supplied Prepared/Presented/Focus, acknowledges exact text input and uploads a
+one-row app2 replacement with changed pixels. Geometry and presentation are
+fixture-supplied: this is not the Session native renderer/owner loop or physical
+acceptance. Sophia retains the test and original timeout under
+`.artifacts/bemenu-protected-join/content-filter*`. The Bemenu connection control
+seeds a later target version and checks authority remains 1 while target version
+advances. Full device-hidden check-sophia passes. The compiled single-field
+mutation restoring authority-per-offer fails that control; artifacts are
+`.artifacts/bemenu-interaction-{authority,mutant}` in Sophia.
+
+The protected pixel run also reports missing default Fontconfig configuration
+and unwritable cache directories. Rendering happened, but font configuration and
+stable text appearance inside the real confinement remain an open readiness
+item. Do not conceal those messages or count this result as font acceptance.

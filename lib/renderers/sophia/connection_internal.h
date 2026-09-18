@@ -46,7 +46,7 @@ struct bm_sophia_connection {
     bool allocation_pending, allocation_valid;
     struct bm_sophia_raster *raster;
     struct bm_sophia_uploaded_view views[SOPHIA_SHELL_UPLOAD_SLOTS];
-    uint64_t now_msec, demand_counter, demand_transaction, demand_started, last_permit, interaction_counter;
+    uint64_t now_msec, demand_counter, demand_transaction, demand_started, last_permit, target_counter;
     bool clock_seen, demand_pending, permit_ready, candidate_active, shown_valid;
     struct sophia_shell_frame_demand demand;
     struct sophia_shell_frame_permit permit;

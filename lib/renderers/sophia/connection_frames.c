@@ -67,13 +67,15 @@ static int offer(struct bm_sophia_connection *c, unsigned slot, const struct sop
         c->demand.allocation.id != c->allocation.allocation.id ||
         c->demand.allocation.generation != c->allocation.allocation.generation)
         return SOPHIA_SHELL_INVALID;
-    if (c->interaction_counter == UINT64_MAX ||
+    if (c->target_counter == UINT64_MAX ||
         244u+50u*v->view.row_count > c->permit.max_candidate_bytes) return SOPHIA_SHELL_INVALID;
     struct sophia_shell_native_candidate begin = {
         .grant = {c->limits.grant.connection_epoch,c->limits.grant.content_grant_epoch},
         .output = {c->allocation.output.id,c->allocation.output.generation},
         .facts_generation = v->facts_generation, .pacing_permit = c->permit.permit_id,
-        .interaction_generation = c->interaction_counter+1, .placement_count = 1,
+        /* Session's current content profile keeps interaction authority at 1.
+         * Render replacement advances candidate/target identity, not authority. */
+        .interaction_generation = 1, .placement_count = 1,
         .opening = v->opening, .catalog_generation = v->view.catalog_generation, .state_revision = v->revision,
         .selected = v->view.selected, .row_count = v->view.row_count,
     };
@@ -85,13 +87,13 @@ static int offer(struct bm_sophia_connection *c, unsigned slot, const struct sop
     for (unsigned i = 0; i < v->view.row_count; ++i) {
         const struct bm_sophia_view_row *row = &v->view.rows[i];
         begin.rows[i] = row->slot;
-        chunk.targets[i] = (struct sophia_shell_native_target){i+1,begin.interaction_generation,row->slot,
+        chunk.targets[i] = (struct sophia_shell_native_target){i+1,c->target_counter+1,row->slot,
             row->x,row->y,row->width,row->height};
     }
     uint64_t transaction = c->next_transaction;
     int r = sophia_shell_native_lifecycle_offer(c->native,&begin,&chunk,&c->next_transaction);
     if (r != SOPHIA_SHELL_OK) return r;
-    ++c->interaction_counter; c->candidate_slot = slot; c->candidate_transaction = transaction;
+    ++c->target_counter; c->candidate_slot = slot; c->candidate_transaction = transaction;
     c->candidate_active = true; c->demand_pending = false; c->permit_ready = false;
     return SOPHIA_SHELL_OK;
 }

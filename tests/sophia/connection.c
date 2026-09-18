@@ -320,6 +320,8 @@ static void automatic_allocation_and_upload(unsigned mode)
         free(expected); teardown(); return;
     }
     if (mode == 2) now_msec += connection->limits.permit_timeout_ms;
+    /* A later target version must not invent a new Session authority epoch. */
+    if (mode == 0) connection->target_counter = 7;
     send_frame(177,demand_tx,permit,sizeof(permit)); tick();
     if (mode == 2) {
         assert(connection->permit_ready && !connection->candidate_active && !connection->outbox.count);
@@ -333,9 +335,12 @@ static void automatic_allocation_and_upload(unsigned mode)
     }
     struct sophia_shell_frame candidate = client_record();
     assert(candidate.kind == 189 && connection->candidate_active);
+    assert(shell_get64(candidate.payload+56) == 1);
     uint64_t candidate_tx = candidate.transaction;
     struct sophia_shell_frame targets = client_record();
     assert(targets.kind == 190);
+    assert(shell_get32(targets.payload+36) > 0);
+    assert(shell_get64(targets.payload+40+64+32+12) == (mode == 0 ? 8 : 1));
     struct sophia_shell_frame finish = client_record();
     assert(finish.kind == 174 && !inspect().native.presented);
     uint8_t outcome[68] = {0}; grant(outcome); shell_put64(outcome+16,1);
