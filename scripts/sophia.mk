@@ -2,8 +2,8 @@
 sophia: bemenu-renderer-sophia.so
 
 SOPHIA_WIRE = $(wildcard vendor/sophia-shell/shell_wire/*.c)
-SOPHIA_SOURCES = lib/renderers/sophia/raster.c $(SOPHIA_WIRE)
-SOPHIA_HEADERS = lib/renderers/sophia/raster.h lib/renderers/cairo_renderer.h $(wildcard vendor/sophia-shell/*.h vendor/sophia-shell/shell_wire/*.h)
+SOPHIA_SOURCES = lib/renderers/sophia/input.c lib/renderers/sophia/raster.c $(SOPHIA_WIRE)
+SOPHIA_HEADERS = lib/renderers/sophia/input.h lib/renderers/sophia/raster.h lib/renderers/cairo_renderer.h $(wildcard vendor/sophia-shell/*.h vendor/sophia-shell/shell_wire/*.h)
 SOPHIA_LIBS = $(shell $(PKG_CONFIG) --libs cairo pangocairo fontconfig) -lm
 SOPHIA_INCLUDES = $(shell $(PKG_CONFIG) --cflags cairo pangocairo fontconfig)
 
@@ -20,12 +20,17 @@ bemenu-renderer-sophia.so: lib/renderers/sophia/sophia.c $(SOPHIA_SOURCES) $(SOP
 	mkdir -p .artifacts
 	$(LINK.c) $(filter %.c,$^) -o $@
 
-check-sophia: sophia .artifacts/sophia-raster-test .artifacts/sophia-catalog-test
+.artifacts/sophia-native-wire-test: vendor/sophia-shell/tests/sophia_shell_wire_native_test.c $(SOPHIA_WIRE) $(SOPHIA_HEADERS)
+	mkdir -p .artifacts
+	$(LINK.c) $(filter %.c,$^) -o $@
+
+check-sophia: sophia .artifacts/sophia-raster-test .artifacts/sophia-catalog-test .artifacts/sophia-native-wire-test
 	python3 scripts/check-sophia-vendor.py
 	.artifacts/sophia-catalog-test vendor/sophia-shell/sophia-shell-launcher.frames
+	.artifacts/sophia-native-wire-test vendor/sophia-shell/sophia-shell-native-launcher.frames
 	python3 scripts/check-sophia-layout.py
 	env -u DISPLAY -u WAYLAND_DISPLAY -u WAYLAND_SOCKET BEMENU_BACKEND=sophia BEMENU_RENDERER=$(CURDIR)/bemenu-renderer-sophia.so LD_LIBRARY_PATH=$(CURDIR) .artifacts/sophia-raster-test
 
 clean: clean-sophia
 clean-sophia:
-	rm -f bemenu-renderer-sophia.so .artifacts/sophia-raster-test .artifacts/sophia-catalog-test
+	rm -f bemenu-renderer-sophia.so .artifacts/sophia-raster-test .artifacts/sophia-catalog-test .artifacts/sophia-native-wire-test

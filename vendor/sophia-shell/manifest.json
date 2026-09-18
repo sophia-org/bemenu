@@ -1,12 +1,12 @@
 {
   "schema": 1,
   "repository": "https://github.com/sophia-org/sophia-stack",
-  "commit": "1209b260d185ca3604586e0ff289f6cbcb4e5a22",
+  "commit": "f6d04ac94f87e3e26a7d3978f8c52f19493887b4",
   "license": "BSD-3-Clause",
   "files": {
     "sophia_shell_wire.h": {
       "source": "bindings/c/sophia_shell_wire.h",
-      "sha256": "0c7bf3237d8748f2825ebe5d98a99e4be8fd932ab9a85558a81aa3781e678e56"
+      "sha256": "ff4a97e7d8981bd805dbb684de78fa1c4f23b789b24192c443fd4c81c41ba53c"
     },
     "sophia_shell_catalog.h": {
       "source": "bindings/c/sophia_shell_catalog.h",
@@ -14,7 +14,7 @@
     },
     "shell_wire/fields.h": {
       "source": "bindings/c/shell_wire/fields.h",
-      "sha256": "a174dc7444c7d4c996349b0604bbe098968e8755da3673b23c03be7b41a810f0"
+      "sha256": "c13b4b5a1eab2e66effb2b50db37b7ea8975d6531326075a3623e2832860cd74"
     },
     "shell_wire/frame.c": {
       "source": "bindings/c/shell_wire/frame.c",
@@ -26,11 +26,11 @@
     },
     "shell_wire/negotiation.c": {
       "source": "bindings/c/shell_wire/negotiation.c",
-      "sha256": "78deb952ab2ce5a6b0ce90bec59e025e8f47f4befe74220b1e4a58a5296ab741"
+      "sha256": "7050347125a29346daeed4089c1c267dcd021e65202cbef93db760f622248764"
     },
     "shell_wire/catalog.c": {
       "source": "bindings/c/shell_wire/catalog.c",
-      "sha256": "f213a95b2f0af7c55968b080bce4e17af9b36a2def78184f823dfd297db6bf3a"
+      "sha256": "97db7e1021f0ab1e464d76898661ee772c96115898cd8aa8c45d3b7e1c339eba"
     },
     "tests/sophia_shell_wire_catalog_test.c": {
       "source": "bindings/c/tests/sophia_shell_wire_catalog_test.c",
@@ -43,6 +43,26 @@
     "sophia-shell-launcher.frames": {
       "source": "protocol/golden/sophia-shell-launcher.frames",
       "sha256": "49a333c7cbb736763b823fdd85759ab230d809bd19fcb62837ee87c68a3a1cc9"
+    },
+    "sophia_shell_native_launcher.h": {
+      "source": "bindings/c/sophia_shell_native_launcher.h",
+      "sha256": "05c2412c4db8d45bc17978cf12c8e3a5d93ecbb320f0e16c472703f02faf6429"
+    },
+    "shell_wire/native_launcher.c": {
+      "source": "bindings/c/shell_wire/native_launcher.c",
+      "sha256": "7b9d75dbbadf84361190671f30cc7a8e96bc6051d901107994c2a8426828d3e1"
+    },
+    "tests/sophia_shell_wire_native_test.c": {
+      "source": "bindings/c/tests/sophia_shell_wire_native_test.c",
+      "sha256": "d23ed3a154ad9619ce5f70379434fb5688a170b00e6700f25718a540112ee9ed"
+    },
+    "sophia-shell-native-launcher.frames": {
+      "source": "protocol/golden/sophia-shell-native-launcher.frames",
+      "sha256": "1a1ecd7dcebd1460a3a685bbd19dd318834638081cf906783c59d5575edc82bc"
+    },
+    "shell_wire/text.h": {
+      "source": "bindings/c/shell_wire/text.h",
+      "sha256": "d4820956f473c6142b3a54b9e392db17640642bffd94856fd7ce4173f0445221"
     }
   }
 }

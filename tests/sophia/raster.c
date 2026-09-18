@@ -1,5 +1,6 @@
 #include "internal.h"
 #include "renderers/sophia/raster.h"
+#include "renderers/sophia/input.h"
 
 #include <assert.h>
 #include <math.h>
@@ -103,6 +104,62 @@ scale_and_bounds(void)
     bm_menu_free(menu);
 }
 
+static void
+semantic_input(void)
+{
+    struct bm_menu *menu = fixture();
+    const uint8_t text[] = "caf\xc3\xa9";
+    assert(bm_sophia_menu_input(menu, 1, text, sizeof(text)-1) == BM_SOPHIA_INPUT_APPLIED);
+    assert(!strcmp(menu->filter, "caf\xc3\xa9"));
+    assert(bm_sophia_menu_input(menu, 6, NULL, 0) == BM_SOPHIA_INPUT_APPLIED);
+    assert(!strcmp(menu->filter, "caf"));
+    const uint8_t invalid[] = {'a', 0xff};
+    assert(bm_sophia_menu_input(menu, 1, invalid, sizeof(invalid)) == BM_SOPHIA_INPUT_REFUSED);
+    assert(!strcmp(menu->filter, "caf"));
+    assert(bm_sophia_menu_input(menu, 17, NULL, 0) == BM_SOPHIA_INPUT_ACCEPT);
+    assert(!bm_menu_get_selected_items(menu, NULL));
+    assert(bm_sophia_menu_input(menu, 18, NULL, 0) == BM_SOPHIA_INPUT_REFUSED);
+    assert(bm_sophia_menu_input(menu, 2, text, 1) == BM_SOPHIA_INPUT_REFUSED);
+    bm_menu_set_filter(menu, "");
+    bm_menu_filter(menu);
+    assert(bm_sophia_menu_input(menu, 13, NULL, 0) == BM_SOPHIA_INPUT_APPLIED);
+    assert(!strcmp(bm_item_get_text(bm_menu_get_highlighted_item(menu)), "Files"));
+    assert(bm_sophia_menu_input(menu, 12, NULL, 0) == BM_SOPHIA_INPUT_APPLIED);
+    assert(!strcmp(bm_item_get_text(bm_menu_get_highlighted_item(menu)), "Terminal"));
+    /* Accepted semantic edits reach the actual raster, not just menu metadata. */
+    struct bm_sophia_raster *raster = bm_sophia_raster_new(640, 320, 1);
+    struct bm_sophia_pixels pixels;
+    assert(raster && bm_sophia_raster_paint(raster, menu, &pixels));
+    unsigned char *before = copy_pixels(&pixels);
+    size_t pixel_bytes = (size_t)pixels.stride * pixels.height;
+    assert(bm_sophia_menu_input(menu, 9, NULL, 0) == BM_SOPHIA_INPUT_APPLIED);
+    assert(!strcmp(bm_item_get_text(bm_menu_get_highlighted_item(menu)), "Browser"));
+    assert(bm_sophia_raster_paint(raster, menu, &pixels));
+    assert(memcmp(before, pixels.data, pixel_bytes));
+    free(before);
+    bm_sophia_raster_free(raster);
+
+    /* Reject the complete event before applying even its valid prefix. */
+    const uint8_t control[] = {'x', '\n'};
+    const uint8_t bidi[] = {'x', 0xe2, 0x80, 0xae};
+    assert(bm_sophia_menu_input(menu, 1, control, sizeof(control)) == BM_SOPHIA_INPUT_REFUSED);
+    assert(bm_sophia_menu_input(menu, 1, bidi, sizeof(bidi)) == BM_SOPHIA_INPUT_REFUSED);
+    assert(!menu->filter || !menu->filter[0]);
+    uint8_t oversized[257];
+    memset(oversized, 'x', sizeof(oversized));
+    assert(bm_sophia_menu_input(menu, 1, oversized, sizeof(oversized)) == BM_SOPHIA_INPUT_REFUSED);
+    char full[4097];
+    memset(full, 'x', sizeof(full)-1);
+    full[sizeof(full)-1] = 0;
+    bm_menu_set_filter(menu, full);
+    assert(bm_sophia_menu_input(menu, 1, text, 1) == BM_SOPHIA_INPUT_REFUSED);
+    assert(!strcmp(menu->filter, full));
+    menu->key_binding = BM_KEY_BINDING_VIM;
+    assert(bm_sophia_menu_input(menu, 17, NULL, 0) == BM_SOPHIA_INPUT_REFUSED);
+    assert(bm_menu_set_items(menu, NULL, 0));
+    bm_menu_free(menu);
+}
+
 int
 main(void)
 {
@@ -112,6 +169,7 @@ main(void)
     const struct bm_renderer **renderers = bm_get_renderers(&count);
     assert(count == 1 && !strcmp(bm_renderer_get_name(renderers[0]), "sophia"));
     assert(!bm_menu_new("sophia"));
+    semantic_input();
     menu_behavior();
     scale_and_bounds();
     return 0;

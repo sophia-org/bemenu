@@ -35,7 +35,7 @@ grant-scoped compositor node identity. The existing single-shell transport now
 uses that implementation through its compatibility facade. Session still needs
 multi-component construction and routing; this is not native admission.
 
-This fork pins Sophia's public C sources at `1209b260` in `vendor/sophia-shell`,
+This fork pins Sophia's public C sources at `f6d04ac94f87e3e26a7d3978f8c52f19493887b4` in `vendor/sophia-shell`,
 including their BSD license, exact upstream paths and SHA-256 manifest. The
 optional renderer compiles these sources without Rust or a Sophia checkout.
 `make check-sophia` verifies the manifest and runs the independent typed catalog
@@ -47,3 +47,18 @@ permission to execute.
 The native constructor deliberately still refuses: revision-7 focused input,
 independent protected admission, content lifecycle and the catalog-backed
 application client are not yet joined. The tests do not establish a live launcher.
+
+
+The revision-7 vendor update includes the shared strict UTF-8 validator and the
+native-launcher structural codec/corpus (11 record kinds). The native corpus
+checks payload structure only, not lifecycle or authorization.
+
+The menu semantic-input adapter applies the 17 revision-7 commands through the
+existing default Bemenu editing/filtering/navigation implementation. UTF-8,
+control/bidi rejection, 256-byte event and 4096-byte filter limits are checked
+before text is applied. Accept returns a request to the future protocol owner;
+it does not select/execute locally. Vim raw-key mode is refused. The caller still
+must establish current event authority and own ACK/revision/activation state.
+Headless tests exercise Unicode deletion, rejected-event preservation, bounded
+filtering, navigation and actual Cairo pixel changes. This is menu behavior,
+not a connected native backend or native acceptance.
