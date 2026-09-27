@@ -214,3 +214,72 @@ Bemenu may report the resulting transport EOF as service code 4. It proves
 protected admission and process reaping, not graceful UI close, actual catalog
 rendering, native presentation, or physical readiness. Those remain subsequent
 integration requirements.
+
+### Native desktop SDK adoption, 2026-09-27
+
+The Sophia t263 SDK extraction supplies a native file-session and launcher
+lifecycle. The adoption branch starts at `7d2d239`, preserving the five local
+commits ahead of origin. Its dependency moves to the complete immutable
+`sophia-org/sophia-desktop-sdk-c` snapshot `6a59a13f026111a7a277943d71c1fdb090613a23`
+under `vendor/sophia-desktop-sdk/source`. The offline checker binds every file,
+executable mode and Git tree to the copied upstream commit. This is a signed
+development pin; publication and a release identity remain pending.
+
+The file path uses the SDK's native records and lifecycle with Bemenu's existing
+menu, filtering and Cairo raster. Catalog rows enter the menu model directly;
+there is no IPC frame translation. Session selects exactly one endpoint through
+`SOPHIA_SHELL_9P_SOCKET` or `SOPHIA_SHELL_SOCKET`; IPC remains the rollback and
+comparison path. No installation or configured default changes in this slice.
+
+The snapshot/catalog baseline builds with warnings denied. Connection, catalog
+(including file rows, allocation refusal and copied-string ownership), codec,
+layout, pin, font-cache and CPU raster checks pass. The full `check-sophia` run
+is still failed: its executable fixture exceeds the two-second hello watchdog.
+The unchanged original binary reproduces the same failure; a syscall trace
+shows the process scanning host NerdFonts files before hello. Retained local
+logs are `.artifacts/sdk-baseline.log`, `sdk-executable-original.log` and
+`sdk-executable.trace` in the adoption worktree. This does not classify later
+file-adapter changes as passing; their tests and the production-export join
+remain required.
+
+The complete adapter now passes `make -j2 check-sophia EXTRA_WARNINGS=-Werror`
+at nice 19 in a device-hidden, network-isolated bubblewrap domain. The first
+strict adapter compile rejected the lifecycle test's 15,264-byte stack frame;
+moving its whole-record fixture to static storage fixed it without relaxing the
+12,500-byte warning. Both that failed log (`sdk-isolated.log`) and the passing
+log (`sdk-isolated-after-stack.log`) remain under `.artifacts`.
+
+The passing run mounts only DejaVu Sans and DejaVu Sans Mono at
+`/usr/share/fonts`, with SHA-256 values
+`7da195a74c55bef988d0d48f9508bd5d849425c1770dba5d7bfc6ce9ed848954` and
+`b4a6c3e4faab8773f4ff761d56451646409f29abedd68f05d38c2df667d3c582`.
+The host's `/usr/local/share/fonts` is absent. The existing executable watchdog
+is unchanged. Fontconfig reports no writable cache directory in this read-only
+domain; the tests still pass. The earlier ambient-font failure stays recorded.
+
+The new adapter tests use the real native SDK lifecycle, file codec and Bemenu
+menu/filter/Cairo, with supplied session outcomes. The linked test contains no
+9P client symbols. They cover pixel content after editing, reserved ack room,
+activation ordering, resource retirement, deferred catalog adoption, advisory
+permit waits and terminal lost acknowledgements. Six snapshot mutation tests
+and all existing IPC, executable, font and raster checks also pass. The actual
+Bemenu executable against the production export is the next gate; no physical
+presentation, launch-policy or daily-driver acceptance is claimed here.
+
+The actual executable gate now passes against Sophia's production file export
+and owners. Sophia integration `c23a38453` runs the artifact prepared by
+`8d1680713` from this branch's signed `a354251a53368b1f99483b5015a20747afab9804`.
+Binary SHA-256 is
+`d64a527da40851404825f4bc307aad7286ecaf94517a6a8c1b3bfd12938cb044`.
+The production protected supervisor hosts two openings, three candidates, one
+text edit and one keyboard activation. Close retires resources, reopen resets
+the query, and SIGTERM stops cleanly. The domain exposes one pinned JetBrains
+Mono font and no devices; its executable, environment and mounts are checked.
+Missing or mismatched artifact inputs fail before launch.
+
+The gate scripts Session decisions and presentation observations, with frozen
+content time; no physical rendering, launch policy, pointer, expiry or reconnect
+coverage is claimed. Evidence is in
+`~/.local/state/sophia/development-evidence/bemenu-files/live-a354251-first.log`.
+The Sophia harness is awaiting review/merge. No application install or default
+switch has occurred.

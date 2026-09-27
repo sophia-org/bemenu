@@ -1,5 +1,5 @@
 #include "connection_internal.h"
-#include "../../../vendor/sophia-shell/shell_wire/fields.h"
+#include "../../../vendor/sophia-desktop-sdk/source/src/shell_wire/fields.h"
 
 static bool expired(struct bm_sophia_connection *c, enum bm_sophia_timeout kind,
                     bool active, uint64_t first, uint64_t second, unsigned phase)

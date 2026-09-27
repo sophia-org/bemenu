@@ -1,7 +1,8 @@
 #ifndef BM_SOPHIA_CATALOG_H
 #define BM_SOPHIA_CATALOG_H
 #include "bemenu.h"
-#include "../../../vendor/sophia-shell/sophia_shell_catalog.h"
+#include "../../../vendor/sophia-desktop-sdk/source/src/sophia_shell_catalog.h"
+#include "../../../vendor/sophia-desktop-sdk/source/src/sophia_shell_files_roles.h"
 
 struct bm_sophia_catalog_row {
     struct bm_item *item;
@@ -23,6 +24,11 @@ struct bm_sophia_catalog_model {
 bool bm_sophia_catalog_install(struct bm_sophia_catalog_model *model,
                               struct bm_menu *menu,
                               const struct sophia_shell_catalog *catalog);
+/* A decoded, pinned file catalog. Rows are copied into the same menu model;
+ * the object storage may be released after success. No IPC assembly is used. */
+bool bm_sophia_catalog_install_files(struct bm_sophia_catalog_model *model,
+                                    struct bm_menu *menu,
+                                    const struct sophia_sf_catalog *catalog);
 bool bm_sophia_catalog_clear(struct bm_sophia_catalog_model *model);
 /* Local display reference only, not authorization. False leaves outputs alone. */
 bool bm_sophia_catalog_identity(const struct bm_sophia_catalog_model *model,

@@ -2,7 +2,7 @@
 #define BM_SOPHIA_CONNECTION_H
 #include <stdbool.h>
 #include <stdint.h>
-#include "../../../vendor/sophia-shell/sophia_shell_native_lifecycle.h"
+#include "../../../vendor/sophia-desktop-sdk/source/src/sophia_shell_native_lifecycle.h"
 
 struct bm_menu;
 struct bm_sophia_connection;
