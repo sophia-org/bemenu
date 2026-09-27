@@ -32,7 +32,7 @@ class Snapshot(unittest.TestCase):
 
     def test_exact_snapshot(self):
         revision, count = checker.verify(self.pin)
-        self.assertEqual(revision, '3ff46a2c44e840e8439b1567cc004665ba4bb762')
+        self.assertEqual(revision, 'a0ab8c853fe56b68e01ae69b82d06c15fc177484')
         self.assertEqual(count, 143)
 
     def test_missing_changed_extra_and_symlink(self):

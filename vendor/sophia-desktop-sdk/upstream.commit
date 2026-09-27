@@ -1,17 +1,13 @@
-tree 4dce59309dcccf95d73aaa17d9410bb1cafd2d4c
-parent 6a59a13f026111a7a277943d71c1fdb090613a23
-author Mason Green <mason@greenm01.net> 1790513319 -0400
-committer Mason Green <mason@greenm01.net> 1790513319 -0400
+tree 5f79419b34dc0cb1e3452ffd7bcc4faf604d0a14
+parent 3ff46a2c44e840e8439b1567cc004665ba4bb762
+author Mason Green <mason@greenm01.net> 1790513831 -0400
+committer Mason Green <mason@greenm01.net> 1790513831 -0400
 gpgsig -----BEGIN PGP SIGNATURE-----
  
- iHUEABYIAB0WIQR+I2QUnoHdebKT6m9XGEu2KoAAYgUCarkQpwAKCRBXGEu2KoAA
- Yu6YAP9m24h1eTuRC7z+8VXxwKAtOmzehExKv0afUP16cPen6QEAtFY9fs4+PjhD
- ofulcVYI1n3G/NsXFkaD8mcRcSpYDwg=
- =vQnZ
+ iHUEABYIAB0WIQR+I2QUnoHdebKT6m9XGEu2KoAAYgUCarkSpwAKCRBXGEu2KoAA
+ Ymv4AP9lS9KRGdp0gdI38uhfgWWleo4DxbRvfC6RKeHW8jblpAD/VNzVFUvG/qsk
+ Er1+ntzMIrjAe4S6HJPrFBytE6JqZAg=
+ =JpHM
  -----END PGP SIGNATURE-----
 
-Wait for custody acknowledgement before reopening transaction
-
-The export retains an accepted submission until its Submitted sequence is acknowledged. Keep the next transaction open pending while callers consume events or fetch an object that blocks cumulative acknowledgement. Preserve custody and continue the other lanes.
-
-Regression: delayed ack caused the previous client to fail on EBUSY even with no next record queued. Delayed-ack and object-hold controls now pass; test callers acknowledge custody before reusing the slot. Full standalone make check passes with strict warnings, nice 19 and two jobs.
+Document prompt custody acknowledgements and enforce them in peers
