@@ -1,7 +1,7 @@
 #include "internal.h"
 #include "renderers/sophia/catalog.h"
 #include "renderers/sophia/view.h"
-#include "../../vendor/sophia-shell/shell_wire/fields.h"
+#include "../../vendor/sophia-desktop-sdk/source/src/shell_wire/fields.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
@@ -206,8 +206,38 @@ static void painted_catalog_identity(void)
     assert(!bm_sophia_view_capture(raster, &model, &view) && !view.data && !view.row_count);
     free(old_pixels); bm_sophia_raster_free(raster); bm_menu_free(menu);
 }
+static void file_catalog_menu(void)
+{
+    uint8_t rows[2 * 656];
+    struct sophia_sf_catalog_entry entry = {7, 1,
+        {(const uint8_t *)"Browser", 7}, {(const uint8_t *)"web", 3}, {NULL, 0}};
+    assert(sophia_sf_catalog_entry_encode(rows, &entry) == 0);
+    entry.slot = 9; entry.available = 0;
+    assert(sophia_sf_catalog_entry_encode(rows + 656, &entry) == 0);
+    struct sophia_sf_catalog catalog = {1, 5, 1, 2, 0, rows, sizeof(rows)};
+    struct bm_menu *menu = menu_new();
+    struct bm_sophia_catalog_model model = {0};
+    assert(bm_sophia_catalog_install_files(&model, menu, &catalog));
+    bm_menu_set_filter(menu, "web"); bm_menu_filter(menu);
+    struct bm_item *browser = only(menu, "Browser");
+    uint64_t epoch, generation; uint16_t slot;
+    assert(bm_sophia_catalog_identity(&model, browser, &epoch, &generation, &slot));
+    assert(epoch == 5 && generation == 1 && slot == 7 && model.count == 1);
+    assert(!bm_sophia_catalog_install_files(&model, menu, &catalog));
+    catalog.generation = 2;
+    fail_after = 0; allocation_refused = false;
+    assert(!bm_sophia_catalog_install_files(&model, menu, &catalog));
+    fail_after = -1;
+    assert(allocation_refused && only(menu, "Browser") == browser && model.generation == 1);
+    assert(bm_sophia_catalog_install_files(&model, menu, &catalog));
+    /* The object can go away immediately: menu strings and identities are owned. */
+    memset(rows, 0, sizeof(rows));
+    assert(only(menu, "Browser"));
+    assert(bm_sophia_catalog_clear(&model)); bm_menu_free(menu);
+}
+
 int main(void)
 {
-    catalog_menu(); foreign_menu(); refused_allocation(); repeated_replacement(); painted_catalog_identity();
+    catalog_menu(); foreign_menu(); refused_allocation(); repeated_replacement(); painted_catalog_identity(); file_catalog_menu();
     return 0;
 }

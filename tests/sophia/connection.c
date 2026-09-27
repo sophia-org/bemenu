@@ -1,6 +1,6 @@
 #include "internal.h"
 #include "renderers/sophia/connection_internal.h"
-#include "../../vendor/sophia-shell/shell_wire/fields.h"
+#include "../../vendor/sophia-desktop-sdk/source/src/shell_wire/fields.h"
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>

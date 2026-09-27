@@ -15,7 +15,7 @@ standalone = tempfile.TemporaryDirectory(prefix='bemenu-executable-')
 binary = Path(standalone.name) / 'bemenu-sophia'
 shutil.copy2(root / 'bemenu-sophia', binary)
 env = dict(os.environ)
-for key in ('SOPHIA_SHELL_SOCKET', 'DISPLAY', 'WAYLAND_DISPLAY', 'WAYLAND_SOCKET', 'BEMENU_BACKEND', 'BEMENU_RENDERER'):
+for key in ('SOPHIA_SHELL_SOCKET', 'SOPHIA_SHELL_9P_SOCKET', 'DISPLAY', 'WAYLAND_DISPLAY', 'WAYLAND_SOCKET', 'BEMENU_BACKEND', 'BEMENU_RENDERER'):
     env.pop(key, None)
 
 def frame(kind, tx, payload):
@@ -37,8 +37,16 @@ def receive(peer):
 assert subprocess.run([binary, '--help'], env=env, capture_output=True, timeout=2).returncode == 0
 assert subprocess.run([binary, '--serve'], env=env, capture_output=True, timeout=2).returncode == 1
 assert subprocess.run([binary, '--unknown'], env=env, capture_output=True, timeout=2).returncode == 2
+for endpoints in (
+    {'SOPHIA_SHELL_9P_SOCKET': ''},
+    {'SOPHIA_SHELL_SOCKET': ''},
+    {'SOPHIA_SHELL_9P_SOCKET': '/missing-files', 'SOPHIA_SHELL_SOCKET': '/missing-ipc'},
+):
+    refused = subprocess.run([binary, '--serve'], env=dict(env, **endpoints),
+                             capture_output=True, timeout=2)
+    assert refused.returncode == 1 and b'stage=connect' in refused.stderr
 limits = next(bytes.fromhex(line.split()[1]) for line in
-    (root/'vendor/sophia-shell/sophia-shell-content.frames').read_text().splitlines()
+    (root/'vendor/sophia-desktop-sdk/source/spec/golden/sophia-shell-content.frames').read_text().splitlines()
     if line.startswith('content-161 '))
 
 for mode in ('reopen', 'wrong_revision', 'startup_timeout'):

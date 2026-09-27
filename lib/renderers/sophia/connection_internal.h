@@ -2,8 +2,8 @@
 #define BM_SOPHIA_CONNECTION_INTERNAL_H
 #include "connection.h"
 #include "view.h"
-#include "../../../vendor/sophia-shell/sophia_shell_upload.h"
-#include "../../../vendor/sophia-shell/sophia_shell_content_control.h"
+#include "../../../vendor/sophia-desktop-sdk/source/src/sophia_shell_upload.h"
+#include "../../../vendor/sophia-desktop-sdk/source/src/sophia_shell_content_control.h"
 
 struct bm_sophia_uploaded_view {
     bool valid;

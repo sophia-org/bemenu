@@ -1,16 +1,15 @@
 #define _GNU_SOURCE
 #include "internal.h"
 #include "connection.h"
+#include "files.h"
 #include "fonts.h"
+#include "../../../vendor/sophia-desktop-sdk/source/src/sophia_desktop_connection.h"
 #include <errno.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <sys/un.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -27,44 +26,42 @@ static bool monotonic(uint64_t *out)
 
 static int connect_endpoint(const char *path)
 {
-    struct sockaddr_un address = {.sun_family = AF_UNIX};
-    struct stat before;
-    if (!path || path[0] != '/' || strlen(path) >= sizeof(address.sun_path) ||
-        lstat(path,&before) || !S_ISSOCK(before.st_mode) || before.st_uid != geteuid()) return -1;
-    memcpy(address.sun_path,path,strlen(path)+1);
-    int fd = socket(AF_UNIX,SOCK_STREAM|SOCK_NONBLOCK|SOCK_CLOEXEC,0);
-    if (fd < 0) return -1;
-    if (connect(fd,(struct sockaddr *)&address,sizeof(address)) < 0) {
-        if (errno != EINPROGRESS) {close(fd); return -1;}
-        uint64_t start, now;
-        if (!monotonic(&start)) {close(fd); return -1;}
-        while (!stopping) {
-            if (!monotonic(&now) || now < start || now-start >= BM_SOPHIA_FAILURE_TIMEOUT_MS) break;
-            struct pollfd poller = {fd,POLLOUT,0};
+    struct sophia_desktop_connection connection = {.fd = -1};
+    uint64_t start, now;
+    if (!monotonic(&start)) return -1;
+    int state = sophia_desktop_connection_begin(&connection,path);
+    while (!stopping && state >= 0) {
+        if (state == SOPHIA_DESKTOP_CONNECTED)
+            return sophia_desktop_connection_take(&connection);
+        if (!monotonic(&now) || now < start || now-start >= BM_SOPHIA_FAILURE_TIMEOUT_MS) break;
+        if (state == SOPHIA_DESKTOP_CONNECT_RETRY) {
+            if (poll(NULL,0,SOPHIA_DESKTOP_CONNECT_RETRY_MS) < 0 && errno != EINTR) break;
+            state = sophia_desktop_connection_begin(&connection,path);
+        } else {
+            struct pollfd poller = {connection.fd,sophia_desktop_connection_events(&connection),0};
             int ready = poll(&poller,1,50);
             if (ready < 0 && errno != EINTR) break;
-            if (ready > 0) {
-                int error = 0; socklen_t bytes = sizeof(error);
-                if (!getsockopt(fd,SOL_SOCKET,SO_ERROR,&error,&bytes) && !error) goto connected;
-                break;
-            }
+            if (ready > 0) state = sophia_desktop_connection_finish(&connection,poller.revents);
         }
-        close(fd); return -1;
     }
-connected:;
-    struct ucred peer; socklen_t bytes = sizeof(peer);
-    if (getsockopt(fd,SOL_SOCKET,SO_PEERCRED,&peer,&bytes) || bytes != sizeof(peer) || peer.uid != geteuid()) {
-        close(fd); return -1;
-    }
-    /* Same-user endpoint authentication is not evidence of protected admission;
-     * Session authenticates/confines this child and the wire grants authority. */
-    return fd;
+    sophia_desktop_connection_close(&connection);
+    return -1;
 }
 
+struct native_client {
+    struct bm_sophia_connection *ipc;
+    struct bm_sophia_files *files;
+};
 static uint32_t displayed(const struct bm_menu *menu)
 {
+    const struct native_client *client = menu->userdata;
+    if (!client) return 0;
+    if (client->files) {
+        struct bm_sophia_files_snapshot state;
+        return bm_sophia_files_inspect(client->files,&state) ? state.displayed : 0;
+    }
     struct bm_sophia_connection_snapshot state;
-    return bm_sophia_connection_inspect(menu->userdata,&state) ? state.displayed : 0;
+    return bm_sophia_connection_inspect(client->ipc,&state) ? state.displayed : 0;
 }
 static struct bm_menu *native_menu(void)
 {
@@ -85,10 +82,49 @@ failed:
     bm_menu_free(menu); return NULL;
 }
 
+static int serve_files(struct bm_menu *menu, const char *path)
+{
+    struct native_client client = {0};
+    uint64_t now;
+    if (!monotonic(&now) || bm_sophia_files_new(menu,path,now,&client.files) < 0) {
+        fputs("bemenu_native status=failed stage=initialize wire=9p\n",stderr);
+        return 1;
+    }
+    menu->userdata = &client;
+    bool announced = false;
+    int result = 0;
+    short revents = 0;
+    while (!stopping) {
+        if (!monotonic(&now)) {result = 1; break;}
+        int step = bm_sophia_files_progress(client.files,revents,now);
+        struct bm_sophia_files_snapshot state;
+        if (!bm_sophia_files_inspect(client.files,&state)) {result = 1; break;}
+        if (step < 0) {
+            fprintf(stderr,"bemenu_native status=failed stage=service wire=9p code=%d phase=%u\n",
+                    step,(unsigned)state.failed);
+            result = 1; break;
+        }
+        if (state.native && !announced) {
+            fprintf(stderr,"bemenu_native status=negotiated revision=7 epoch=%llu wire=9p\n",
+                    (unsigned long long)state.connection_epoch);
+            announced = true;
+        }
+        struct pollfd poller;
+        int timeout;
+        if (bm_sophia_files_poll(client.files,now,&poller,&timeout) < 0) {result = 1; break;}
+        int ready = poll(&poller,1,timeout);
+        if (ready < 0 && errno != EINTR) {result = 1; break;}
+        revents = ready > 0 ? poller.revents : 0;
+    }
+    bm_sophia_files_dispose(client.files);
+    menu->userdata = NULL;
+    return result;
+}
+
 int main(int argc, char **argv)
 {
     if (argc == 2 && !strcmp(argv[1],"--help")) {
-        puts("Usage: bemenu-sophia --serve\nRequires Session's SOPHIA_SHELL_SOCKET; persistent native launcher.");
+        puts("Usage: bemenu-sophia --serve\nRequires exactly one of Session's SOPHIA_SHELL_9P_SOCKET or SOPHIA_SHELL_SOCKET; persistent native launcher.");
         return 0;
     }
     if (argc != 2 || strcmp(argv[1],"--serve")) {
@@ -97,19 +133,33 @@ int main(int argc, char **argv)
     struct sigaction action = {.sa_handler = stop};
     sigemptyset(&action.sa_mask);
     if (sigaction(SIGTERM,&action,NULL) || sigaction(SIGINT,&action,NULL)) return 1;
-    int fd = connect_endpoint(getenv("SOPHIA_SHELL_SOCKET"));
-    if (fd < 0) {fputs("bemenu_native status=failed stage=connect\n",stderr); return 1;}
+    struct sophia_desktop_endpoint endpoint;
+    if (sophia_desktop_shell_environment(&endpoint) != 0) {
+        fputs("bemenu_native status=failed stage=connect\n",stderr); return 1;
+    }
+    int fd = endpoint.wire == SOPHIA_DESKTOP_IPC ? connect_endpoint(endpoint.path) : -1;
+    if (endpoint.wire == SOPHIA_DESKTOP_IPC && fd < 0) {
+        fputs("bemenu_native status=failed stage=connect\n",stderr); return 1;
+    }
     const char *const font_directories[] = {"/usr/share/fonts", "/usr/local/share/fonts"};
     struct bm_sophia_fonts *fonts = bm_sophia_fonts_new(font_directories,2);
-    if (!fonts) {close(fd); fputs("bemenu_native status=failed stage=fonts\n",stderr); return 1;}
+    if (!fonts) {if (fd >= 0) close(fd); fputs("bemenu_native status=failed stage=fonts\n",stderr); return 1;}
     struct bm_menu *menu = native_menu();
+    if (endpoint.wire == SOPHIA_DESKTOP_FILES) {
+        int result = menu ? serve_files(menu,endpoint.path) : 1;
+        if (menu) bm_menu_free(menu);
+        if (!bm_sophia_fonts_free(fonts)) result = 1;
+        fprintf(stderr,"bemenu_native status=stopped result=%d\n",result);
+        return result;
+    }
     struct bm_sophia_connection *connection = NULL;
     if (!menu || bm_sophia_connection_new(menu,fd,&connection) != SOPHIA_SHELL_OK) {
         close(fd); if (menu) bm_menu_free(menu);
         if (!bm_sophia_fonts_free(fonts)) fputs("bemenu_native status=failed stage=font_cache_cleanup\n",stderr);
         fputs("bemenu_native status=failed stage=initialize\n",stderr); return 1;
     }
-    menu->userdata = connection;
+    struct native_client client = {.ipc = connection};
+    menu->userdata = &client;
     bool announced = false;
     int result = 0;
     while (!stopping) {
