@@ -265,3 +265,21 @@ permit waits and terminal lost acknowledgements. Six snapshot mutation tests
 and all existing IPC, executable, font and raster checks also pass. The actual
 Bemenu executable against the production export is the next gate; no physical
 presentation, launch-policy or daily-driver acceptance is claimed here.
+
+The actual executable gate now passes against Sophia's production file export
+and owners. Sophia integration `c23a38453` runs the artifact prepared by
+`8d1680713` from this branch's signed `a354251a53368b1f99483b5015a20747afab9804`.
+Binary SHA-256 is
+`d64a527da40851404825f4bc307aad7286ecaf94517a6a8c1b3bfd12938cb044`.
+The production protected supervisor hosts two openings, three candidates, one
+text edit and one keyboard activation. Close retires resources, reopen resets
+the query, and SIGTERM stops cleanly. The domain exposes one pinned JetBrains
+Mono font and no devices; its executable, environment and mounts are checked.
+Missing or mismatched artifact inputs fail before launch.
+
+The gate scripts Session decisions and presentation observations, with frozen
+content time; no physical rendering, launch policy, pointer, expiry or reconnect
+coverage is claimed. Evidence is in
+`~/.local/state/sophia/development-evidence/bemenu-files/live-a354251-first.log`.
+The Sophia harness is awaiting review/merge. No application install or default
+switch has occurred.
