@@ -32,8 +32,8 @@ class Snapshot(unittest.TestCase):
 
     def test_exact_snapshot(self):
         revision, count = checker.verify(self.pin)
-        self.assertEqual(revision, 'a0ab8c853fe56b68e01ae69b82d06c15fc177484')
-        self.assertEqual(count, 143)
+        self.assertEqual(revision, '8decca1d73699d6750c9228ecbf6e27f589d965d')
+        self.assertEqual(count, 167)
 
     def test_missing_changed_extra_and_symlink(self):
         path = self.pin / 'source/src/sophia_shell_session.h'

@@ -335,6 +335,20 @@ linked legacy shell or WM entry points. Evidence and the copied input inventory
 are in `~/.local/state/sophia/development-evidence/bemenu-9p-only/`.
 
 The C SDK pin remains `a0ab8c853fe56b68e01ae69b82d06c15fc177484`.
+
+### Shared SDK alignment, 2026-09-27
+
+The snapshot now pins `8decca1d73699d6750c9228ecbf6e27f589d965d` (167
+files), matching the qualified WM SDK and Sophia's next candidate. This adds
+the SDK's WM files/session layer without changing Bemenu's adapter or enabling
+IPC. The exact-tree mutation test now expects that revision and inventory.
+The private-copy `make -j2 check-sophia EXTRA_WARNINGS=-Werror` gate passes
+with isolated DejaVu fonts, no network, display or devices, at nice 19.
+It covers SDK file tests, menu/adapter tests, the two-opening executable
+fixture and CPU raster. The earlier failure was the test's old expected pin;
+the assertion was updated to the newly verified snapshot. Logs remain under
+development-evidence/final-9p/bemenu-strict-run{2,3}.log. The new signed source
+still needs its immutable artifact and external production-owner live gate.
 The external artifact must be prepared from the new signed Bemenu commit and
 its 9P production-owner test rerun; the IPC integration tests are retired. No
 current session, installed release or upstream X11/Wayland/curses backend was
