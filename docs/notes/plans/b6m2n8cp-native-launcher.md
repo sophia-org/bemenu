@@ -281,5 +281,22 @@ The gate scripts Session decisions and presentation observations, with frozen
 content time; no physical rendering, launch policy, pointer, expiry or reconnect
 coverage is claimed. Evidence is in
 `~/.local/state/sophia/development-evidence/bemenu-files/live-a354251-first.log`.
-The Sophia harness is awaiting review/merge. No application install or default
-switch has occurred.
+The initial Sophia harness awaited review at that checkpoint. No application
+install or default switch occurred.
+
+The adoption is now merged locally as signed master `2e0fd78`, preserving the
+five earlier unpushed commits. Sophia master `17b1709a4` contains the reviewed
+helper and production harness. The final SDK pin is
+`a0ab8c853fe56b68e01ae69b82d06c15fc177484`, including the custody-acknowledgement
+ordering fix and its caller guidance. The adapter acknowledges each processing
+pass and fetches announced objects promptly, including catalogs whose UI
+adoption must wait until close.
+
+The strict isolated gate passes for source
+`fc79f64d722b09b6b4f08fd538d74ee2b1dbf35e`; the fresh signed-source artifact has
+SHA-256 `81cf4008d43e59cc944de141737de9404384922415846ee9f628636a9b5cd678`.
+The live production-export gate again passes two openings, three candidates,
+one edit and one keyboard activation. Evidence: adoption worktree
+`.artifacts/sdk-isolated-a0ab8c8.log` and Sophia development evidence
+`bemenu-files/{prepare-fc79f64,live-fc79f64}.log`. The integration remains local;
+publication, installation and attended acceptance are separate.
