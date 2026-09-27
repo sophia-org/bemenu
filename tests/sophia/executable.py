@@ -1,100 +1,81 @@
 #!/usr/bin/env python3
-"""Real executable, private Unix listener; supplied wire policy, no display/device."""
+"""Real executable over private 9P; supplied outcomes, no display/device proof."""
 import os
 from pathlib import Path
 import socket
 import shutil
-import struct
 import subprocess
 import tempfile
+import time
+from file_peer import Peer, exact, unpack
 
 root = Path(__file__).resolve().parents[2]
-# Exercise the selected executable without sibling libbemenu/plugin files.
-# System Cairo/Pango remain shared; this is not a fully static executable.
-standalone = tempfile.TemporaryDirectory(prefix='bemenu-executable-')
-binary = Path(standalone.name) / 'bemenu-sophia'
-shutil.copy2(root / 'bemenu-sophia', binary)
-env = dict(os.environ)
-for key in ('SOPHIA_SHELL_SOCKET', 'SOPHIA_SHELL_9P_SOCKET', 'DISPLAY', 'WAYLAND_DISPLAY', 'WAYLAND_SOCKET', 'BEMENU_BACKEND', 'BEMENU_RENDERER'):
-    env.pop(key, None)
+# The selected executable works without sibling libbemenu or plugin files.
+# Cairo/Pango remain system libraries; this is not a fully static binary.
+with tempfile.TemporaryDirectory(prefix='bemenu-executable-') as directory:
+    binary = Path(directory) / 'bemenu-sophia'
+    shutil.copy2(root / 'bemenu-sophia', binary)
+    env = dict(os.environ)
+    for key in ('SOPHIA_SHELL_SOCKET', 'SOPHIA_SHELL_9P_SOCKET', 'DISPLAY',
+                'WAYLAND_DISPLAY', 'WAYLAND_SOCKET', 'BEMENU_BACKEND', 'BEMENU_RENDERER'):
+        env.pop(key, None)
+    symbols = subprocess.run(['nm', '--defined-only', binary], check=True,
+                             capture_output=True, text=True, timeout=5).stdout
+    assert not any(line.split()[-1].startswith(('sophia_shell_', 'sophia_wm_'))
+                   for line in symbols.splitlines() if line.split()), 'IPC code linked'
+    assert 'sophia_ns_next' in symbols and 'sophia_ss_dispatch' in symbols
+    assert subprocess.run([binary, '--help'], env=env, capture_output=True, timeout=2).returncode == 0
+    assert subprocess.run([binary, '--serve'], env=env, capture_output=True, timeout=2).returncode == 1
+    assert subprocess.run([binary, '--unknown'], env=env, capture_output=True, timeout=2).returncode == 2
+    endpoints = [{'SOPHIA_SHELL_9P_SOCKET': ''}]
+    for retired in ('', '/retired'):
+        endpoints.append({'SOPHIA_SHELL_SOCKET': retired})
+        endpoints.append({'SOPHIA_SHELL_SOCKET': retired, 'SOPHIA_SHELL_9P_SOCKET': '/files'})
+    for selection in endpoints:
+        refused = subprocess.run([binary, '--serve'], env=dict(env, **selection),
+                                 capture_output=True, timeout=2)
+        assert refused.returncode == 1 and b'stage=connect' in refused.stderr
 
-def frame(kind, tx, payload):
-    return struct.pack('<4sHHQII', b'SOPH', 1, kind, tx, len(payload), 0) + payload
-
-def exact(peer, count):
-    data = b''
-    while len(data) < count:
-        part = peer.recv(count-len(data))
-        assert part, 'unexpected executable disconnect'
-        data += part
-    return data
-
-def receive(peer):
-    magic, version, kind, tx, length, reserved = struct.unpack('<4sHHQII', exact(peer, 24))
-    assert magic == b'SOPH' and version == 1 and not reserved and length <= 65536
-    return kind, tx, exact(peer, length)
-
-assert subprocess.run([binary, '--help'], env=env, capture_output=True, timeout=2).returncode == 0
-assert subprocess.run([binary, '--serve'], env=env, capture_output=True, timeout=2).returncode == 1
-assert subprocess.run([binary, '--unknown'], env=env, capture_output=True, timeout=2).returncode == 2
-for endpoints in (
-    {'SOPHIA_SHELL_9P_SOCKET': ''},
-    {'SOPHIA_SHELL_SOCKET': ''},
-    {'SOPHIA_SHELL_9P_SOCKET': '/missing-files', 'SOPHIA_SHELL_SOCKET': '/missing-ipc'},
-):
-    refused = subprocess.run([binary, '--serve'], env=dict(env, **endpoints),
-                             capture_output=True, timeout=2)
-    assert refused.returncode == 1 and b'stage=connect' in refused.stderr
-limits = next(bytes.fromhex(line.split()[1]) for line in
-    (root/'vendor/sophia-desktop-sdk/source/spec/golden/sophia-shell-content.frames').read_text().splitlines()
-    if line.startswith('content-161 '))
-
-for mode in ('reopen', 'wrong_revision', 'startup_timeout'):
-    with tempfile.TemporaryDirectory(prefix='bemenu-native-') as directory:
-        path = str(Path(directory)/'peer.sock')
+    for mode in ('reopen', 'wrong_revision', 'startup_timeout'):
+        path = str(Path(directory) / (mode + '.sock'))
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
             listener.bind(path)
             listener.listen(1)
-            listener.settimeout(2)
-            child = subprocess.Popen([binary, '--serve'], env=dict(env, SOPHIA_SHELL_SOCKET=path),
-                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            listener.settimeout(15)
+            child = subprocess.Popen([binary, '--serve'], env=dict(env, SOPHIA_SHELL_9P_SOCKET=path),
+                                     stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             try:
-                with listener.accept()[0] as peer:
-                    peer.settimeout(2)
-                    kind, tx, hello = receive(peer)
-                    assert kind == 96 and tx == 0 and struct.unpack('<HHQ', hello) == (7, 7, 0x9a0)
+                with listener.accept()[0] as socket_peer:
+                    socket_peer.settimeout(10)
                     if mode == 'startup_timeout':
-                        stdout, stderr = child.communicate(timeout=7)
-                        assert child.returncode == 1 and b'timeout=1' in stderr
+                        size, kind, _ = unpack('IBH', exact(socket_peer, 7))
+                        assert kind == 100 and exact(socket_peer, size - 7)[6:] == b'9P2000.L'
+                        # Withhold the version response; the client must end its wait.
+                        stdout, stderr = child.communicate(timeout=8)
+                        assert child.returncode == 1 and b'status=failed' in stderr
                     else:
-                        welcome = struct.pack('<HHQQHHHH', 6 if mode == 'wrong_revision' else 7, 0, 11, 0x9a0, 16, 128, 16, 0)
-                        peer.sendall(frame(97, 0, welcome))
-                        if mode == 'wrong_revision':
-                            stdout, stderr = child.communicate(timeout=2)
-                            assert child.returncode == 1 and b'stage=service' in stderr
-                        else:
-                            peer.sendall(limits + frame(114, 9, struct.pack('<QQHH', 11, 9, 0, 0)) +
-                                frame(116, 9, struct.pack('<QQ', 11, 9)))
-                            facts = struct.pack('<QQQIIQQIIIIQ', 11, 3, 1, 1, 0, 2, 7, 1280, 720, 1, 1, 1)
-                            peer.sendall(frame(162, 70, facts))
-                            for opening in (1, 2):
-                                peer.sendall(frame(187, 50+opening, struct.pack('<7Q', 11, 3, opening, 2, 7, 9, 1)))
-                                kind, tx, request = receive(peer)
-                                assert kind == 188 and struct.unpack_from('<Q', request, 16)[0] == opening
-                                request_id = struct.unpack_from('<Q', request, 40)[0]
-                                assert request_id == opening
-                                refusal = bytearray(160)
-                                struct.pack_into('<QQQHH', refusal, 0, 11, 3, request_id, 2, 2)
-                                struct.pack_into('<QQ', refusal, 32, 2, 7)
-                                peer.sendall(frame(164, tx, refusal) +
-                                    frame(197, 90+opening, struct.pack('<QQQHH', 11, 3, opening, 11, 0)))
+                        peer = Peer(socket_peer, root, wrong_revision=mode == 'wrong_revision')
+                        deadline = time.monotonic() + 15
+                        try:
+                            while not peer.finished:
+                                assert time.monotonic() < deadline, '9P fixture deadline'
+                                peer.step()
+                        except (EOFError, ConnectionResetError, BrokenPipeError):
+                            assert mode == 'wrong_revision'
+                        if mode == 'reopen':
+                            assert peer.allocations == 2
                             child.terminate()
-                            stdout, stderr = child.communicate(timeout=2)
-                            assert child.returncode == 0 and stderr.count(b'status=negotiated') == 1
+                        stdout, stderr = child.communicate(timeout=5)
+                        if mode == 'wrong_revision':
+                            assert child.returncode == 1 and b'status=failed' in stderr
+                            assert b'status=negotiated' not in stderr
+                        else:
+                            assert child.returncode == 0, stderr
+                            assert stderr.count(b'status=negotiated revision=7 epoch=11 wire=9p') == 1
+                            assert b'status=failed' not in stderr
                     assert not stdout
             finally:
                 if child.poll() is None:
                     child.kill()
-                    child.communicate(timeout=2)
-print('bemenu_executable private_socket=pass openings=2 startup_timeout=pass native=false')
-standalone.cleanup()
+                    child.communicate(timeout=5)
+print('bemenu_executable private_9p=pass openings=2 startup_timeout=pass ipc_linked=false native=false')

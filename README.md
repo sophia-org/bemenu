@@ -11,6 +11,21 @@ Releases are signed with [29317348D687B86B](http://pgp.mit.edu/pks/lookup?op=vin
 
 ## Building
 
+### Sophia native launcher
+
+`make bemenu-sophia` builds the persistent launcher with the pinned standalone
+C desktop SDK. It uses only 9P2000.L: Session must supply
+`SOPHIA_SHELL_9P_SOCKET`. Any presence of the retired `SOPHIA_SHELL_SOCKET`
+variable is refused, including an empty value. Application activation remains
+Session's responsibility.
+
+Run `make -j2 check-sophia EXTRA_WARNINGS=-Werror` for the file transport,
+menu, input and CPU raster checks. The fixtures supply Session outcomes; this
+gate does not prove physical presentation. The upstream backends below are
+unchanged.
+
+### Upstream backends
+
 ```sh
 # Build everything
 make

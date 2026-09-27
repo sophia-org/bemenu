@@ -1,7 +1,6 @@
 #ifndef BM_SOPHIA_CATALOG_H
 #define BM_SOPHIA_CATALOG_H
 #include "bemenu.h"
-#include "../../../vendor/sophia-desktop-sdk/source/src/sophia_shell_catalog.h"
 #include "../../../vendor/sophia-desktop-sdk/source/src/sophia_shell_files_roles.h"
 
 struct bm_sophia_catalog_row {
@@ -17,15 +16,8 @@ struct bm_sophia_catalog_model {
     size_t count;
     uint64_t connection_epoch, generation;
 };
-/* Only a committed, validated wire catalog; no executables or local discovery.
- * Failure before installation preserves the current menu/identities. Existing
- * libbemenu filtering runs after commit and can yield no rows on allocation
- * failure. A menu owned/modified elsewhere refuses, rather than stealing items. */
-bool bm_sophia_catalog_install(struct bm_sophia_catalog_model *model,
-                              struct bm_menu *menu,
-                              const struct sophia_shell_catalog *catalog);
 /* A decoded, pinned file catalog. Rows are copied into the same menu model;
- * the object storage may be released after success. No IPC assembly is used. */
+ * the object storage may be released after success.  */
 bool bm_sophia_catalog_install_files(struct bm_sophia_catalog_model *model,
                                     struct bm_menu *menu,
                                     const struct sophia_sf_catalog *catalog);

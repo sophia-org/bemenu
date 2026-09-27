@@ -25,7 +25,7 @@ free_rows(struct bm_sophia_catalog_row *rows, size_t count, bool items)
     free(rows);
 }
 
-/* Borrowed display values, independent of either transport's assembly. */
+/* Borrowed display values, copied from the pinned file object. */
 struct catalog_entry {
     uint16_t slot, available;
     const char *label, *keywords;
@@ -97,27 +97,6 @@ fail:
     free_rows(rows, used, true);
     free(items);
     return false;
-}
-
-static bool
-ipc_entry(const void *source, size_t i, struct catalog_entry *out)
-{
-    const struct sophia_shell_catalog_entry *entry = (const struct sophia_shell_catalog_entry *)source + i;
-    *out = (struct catalog_entry){entry->slot, entry->available, entry->label,
-        entry->keywords, entry->label_bytes, entry->keywords_bytes};
-    return true;
-}
-
-bool
-bm_sophia_catalog_install(struct bm_sophia_catalog_model *model, struct bm_menu *menu,
-                         const struct sophia_shell_catalog *catalog)
-{
-    if (!catalog || catalog->failed) return false;
-    size_t count = 0;
-    uint64_t generation = 0;
-    const struct sophia_shell_catalog_entry *entries = sophia_shell_catalog_entries(catalog, &count, &generation);
-    return entries && install(model, menu, catalog->connection_epoch, generation,
-                              count, ipc_entry, entries);
 }
 
 static bool

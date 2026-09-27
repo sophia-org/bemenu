@@ -1,7 +1,7 @@
 #include "internal.h"
 
-/* The raster seam is usable headlessly; transport admission is not implemented
- * yet. Never turn selecting this backend into an ambient X/Wayland fallback,
+/* The raster seam is usable headlessly; the persistent bemenu-sophia executable
+ * owns transport admission. Never turn selecting this backend into an ambient X/Wayland fallback,
  * an unresponsive fake menu, or authorization inferred from an environment fd. */
 static bool
 constructor(struct bm_menu *menu)

@@ -1,7 +1,6 @@
 #include "internal.h"
 #include "renderers/sophia/catalog.h"
 #include "renderers/sophia/view.h"
-#include "../../vendor/sophia-desktop-sdk/source/src/shell_wire/fields.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,33 +24,38 @@ void *__wrap_calloc(size_t n, size_t size)
     return __real_calloc(n, size);
 }
 
+/* Build complete typed file objects; there is no incremental wire catalog. */
 struct wire_fixture {
-    struct sophia_shell_catalog catalog;
-    struct sophia_shell_catalog_entry a[4], b[4];
+    struct sophia_sf_catalog catalog;
+    uint8_t rows[4 * 656];
+    uint64_t generation;
+    uint16_t count, used;
 };
 static void init(struct wire_fixture *f, uint64_t epoch)
 {
-    struct sophia_shell_welcome welcome = {7,epoch,SOPHIA_SHELL_CAP_APPLICATION_CATALOG,0,0,0};
-    assert(sophia_shell_catalog_init(&f->catalog, &welcome, f->a, f->b, 4) == 0);
+    memset(f,0,sizeof(*f)); f->catalog.connection_epoch = epoch;
 }
-static int control(struct wire_fixture *f, uint16_t kind, uint64_t gen, uint16_t count)
+static int begin(struct wire_fixture *f, uint64_t gen, uint16_t count)
 {
-    uint8_t p[20] = {0};
-    shell_put64(p, f->catalog.connection_epoch); shell_put64(p+8, gen); shell_put16(p+16, count);
-    struct sophia_shell_frame frame = {kind,1,p,kind == 114 ? 20 : 16};
-    return sophia_shell_catalog_accept(&f->catalog, &frame);
+    assert(count <= 4); f->generation = gen; f->count = count; f->used = 0;
+    return 0;
+}
+static int finish(struct wire_fixture *f)
+{
+    assert(f->used == f->count);
+    f->catalog = (struct sophia_sf_catalog){1,f->catalog.connection_epoch,
+        f->generation,f->count,0,f->rows,(size_t)f->count*656};
+    return 1;
 }
 static void entry(struct wire_fixture *f, uint64_t gen, uint16_t slot,
                   const char *label, const char *keywords, bool available)
 {
-    uint8_t p[408] = {0};
-    size_t n = strlen(label), k = strlen(keywords);
-    assert(n <= 128 && k <= 256);
-    shell_put64(p, f->catalog.connection_epoch); shell_put64(p+8, gen);
-    shell_put16(p+16, slot); shell_put16(p+18, available); shell_put16(p+20, (uint16_t)n);
-    memcpy(p+22, label, n); shell_put16(p+22+n, (uint16_t)k); memcpy(p+24+n, keywords, k);
-    struct sophia_shell_frame frame = {115,1,p,24+n+k};
-    assert(sophia_shell_catalog_accept(&f->catalog, &frame) == 0);
+    assert(gen == f->generation && f->used < f->count);
+    struct sophia_sf_catalog_entry row = {slot,available,
+        {(const uint8_t *)label,strlen(label)},
+        {(const uint8_t *)keywords,strlen(keywords)}, {NULL,0}};
+    assert(sophia_sf_catalog_entry_encode(f->rows + 656*f->used,&row) == 0);
+    ++f->used;
 }
 static struct bm_menu *menu_new(void)
 {
@@ -72,15 +76,15 @@ static void catalog_menu(void)
     struct wire_fixture wire; init(&wire, 5);
     struct bm_menu *menu = menu_new();
     struct bm_sophia_catalog_model model = {0};
-    assert(!bm_sophia_catalog_install(&model, menu, &wire.catalog));
-    assert(control(&wire, 114, 1, 3) == 0);
+    assert(!bm_sophia_catalog_install_files(&model, menu, &wire.catalog));
+    assert(begin(&wire, 1, 3) == 0);
     entry(&wire, 1, 3, "Browser", "internet web", true);
     entry(&wire, 1, 7, "Editor", "code", true);
     entry(&wire, 1, 12, "Unavailable", "web", false);
-    assert(control(&wire, 116, 1, 0) == 1);
-    assert(bm_sophia_catalog_install(&model, menu, &wire.catalog));
+    assert(finish(&wire) == 1);
+    assert(bm_sophia_catalog_install_files(&model, menu, &wire.catalog));
     assert(model.count == 2 && model.generation == 1);
-    assert(!bm_sophia_catalog_install(&model, menu, &wire.catalog));
+    assert(!bm_sophia_catalog_install_files(&model, menu, &wire.catalog));
     bm_menu_set_filter(menu, "web"); bm_menu_filter(menu);
     struct bm_item *browser = only(menu, "Browser");
     uint64_t epoch = 0, generation = 0; uint16_t slot = 0;
@@ -93,23 +97,23 @@ static void catalog_menu(void)
     bm_item_set_userdata(foreign, browser->userdata);
     assert(!bm_sophia_catalog_identity(&model, foreign, &epoch, &generation, &slot));
     assert(epoch == 5 && generation == 1 && slot == 3); bm_item_free(foreign);
-    /* A replacement never exposes its partial transfer, or reuses old identity. */
-    assert(control(&wire, 114, 2, 1) == 0);
+    /* A replacement never installs its unfinished object, or reuses old identity. */
+    assert(begin(&wire, 2, 1) == 0);
     entry(&wire, 2, 4096, "Browser Two", "web", true);
-    assert(!bm_sophia_catalog_install(&model, menu, &wire.catalog));
+    assert(!bm_sophia_catalog_install_files(&model, menu, &wire.catalog));
     assert(only(menu, "Browser") == browser);
-    assert(control(&wire, 116, 2, 0) == 1);
-    assert(bm_sophia_catalog_install(&model, menu, &wire.catalog));
+    assert(finish(&wire) == 1);
+    assert(bm_sophia_catalog_install_files(&model, menu, &wire.catalog));
     struct bm_item *next = only(menu, "Browser Two");
     assert(bm_sophia_catalog_identity(&model, next, &epoch, &generation, &slot));
     assert(epoch == 5 && generation == 2 && slot == 4096);
     /* Reject another connection even when it has a numerically newer catalog. */
     struct wire_fixture other; init(&other, 6);
-    assert(control(&other, 114, 3, 0) == 0 && control(&other, 116, 3, 0) == 1);
-    assert(!bm_sophia_catalog_install(&model, menu, &other.catalog));
+    assert(begin(&other, 3, 0) == 0 && finish(&other) == 1);
+    assert(!bm_sophia_catalog_install_files(&model, menu, &other.catalog));
     assert(only(menu, "Browser Two") == next);
-    assert(control(&wire, 114, 3, 0) == 0 && control(&wire, 116, 3, 0) == 1);
-    assert(bm_sophia_catalog_install(&model, menu, &wire.catalog));
+    assert(begin(&wire, 3, 0) == 0 && finish(&wire) == 1);
+    assert(bm_sophia_catalog_install_files(&model, menu, &wire.catalog));
     uint32_t count; bm_menu_get_filtered_items(menu, &count); assert(count == 0);
     assert(model.count == 0 && model.generation == 3);
     assert(bm_sophia_catalog_clear(&model)); assert(bm_sophia_catalog_clear(&model));
@@ -118,11 +122,11 @@ static void catalog_menu(void)
 static void foreign_menu(void)
 {
     struct wire_fixture wire; init(&wire, 5);
-    assert(control(&wire, 114, 1, 1) == 0);
-    entry(&wire, 1, 1, "A", "", true); assert(control(&wire, 116, 1, 0) == 1);
+    assert(begin(&wire, 1, 1) == 0);
+    entry(&wire, 1, 1, "A", "", true); assert(finish(&wire) == 1);
     struct bm_menu *menu = menu_new(); struct bm_sophia_catalog_model model = {0};
     struct bm_item *foreign = bm_item_new("foreign"); assert(foreign && bm_menu_add_item(menu, foreign));
-    assert(!bm_sophia_catalog_install(&model, menu, &wire.catalog));
+    assert(!bm_sophia_catalog_install_files(&model, menu, &wire.catalog));
     assert(only(menu, "foreign") == foreign);
     bm_menu_free(menu);
 }
@@ -131,18 +135,18 @@ static void refused_allocation(void)
     for (int failure=0; failure<4; ++failure) {
         struct wire_fixture wire; init(&wire, 5);
         struct bm_menu *menu = menu_new(); struct bm_sophia_catalog_model model = {0};
-        assert(control(&wire, 114, 1, 1) == 0);
-        entry(&wire, 1, 1, "Old", "", true); assert(control(&wire, 116, 1, 0) == 1);
-        assert(bm_sophia_catalog_install(&model, menu, &wire.catalog));
+        assert(begin(&wire, 1, 1) == 0);
+        entry(&wire, 1, 1, "Old", "", true); assert(finish(&wire) == 1);
+        assert(bm_sophia_catalog_install_files(&model, menu, &wire.catalog));
         struct bm_item *old = only(menu, "Old");
-        assert(control(&wire, 114, 2, 2) == 0);
+        assert(begin(&wire, 2, 2) == 0);
         entry(&wire, 2, 2, "New", "web", true);
-        entry(&wire, 2, 3, "Second", "code", true); assert(control(&wire, 116, 2, 0) == 1);
+        entry(&wire, 2, 3, "Second", "code", true); assert(finish(&wire) == 1);
         fail_after = failure; allocation_refused = false;
-        assert(!bm_sophia_catalog_install(&model, menu, &wire.catalog));
+        assert(!bm_sophia_catalog_install_files(&model, menu, &wire.catalog));
         fail_after = -1;
         assert(allocation_refused && model.generation == 1 && only(menu, "Old") == old);
-        assert(bm_sophia_catalog_install(&model, menu, &wire.catalog));
+        assert(bm_sophia_catalog_install_files(&model, menu, &wire.catalog));
         assert(model.generation == 2 && model.count == 2);
         assert(bm_sophia_catalog_clear(&model)); bm_menu_free(menu);
     }
@@ -154,10 +158,10 @@ static void repeated_replacement(void)
     bm_menu_set_filter(menu, "web");
     for (uint64_t gen=1; gen<=1000; ++gen) {
         bool populated = gen%3 != 0;
-        assert(control(&wire, 114, gen, populated ? 1 : 0) == 0);
+        assert(begin(&wire, gen, populated ? 1 : 0) == 0);
         if (populated) entry(&wire, gen, (uint16_t)gen, "Browser", "web", true);
-        assert(control(&wire, 116, gen, 0) == 1);
-        assert(bm_sophia_catalog_install(&model, menu, &wire.catalog));
+        assert(finish(&wire) == 1);
+        assert(bm_sophia_catalog_install_files(&model, menu, &wire.catalog));
         if (populated) {
             uint64_t epoch, generation; uint16_t slot;
             assert(bm_sophia_catalog_identity(&model, only(menu, "Browser"), &epoch, &generation, &slot));
@@ -175,11 +179,11 @@ static void painted_catalog_identity(void)
         assert(bm_menu_set_color(menu, i, NULL));
     bm_menu_set_lines(menu, 4);
     struct bm_sophia_catalog_model model = {0};
-    assert(control(&wire, 114, 1, 2) == 0);
+    assert(begin(&wire, 1, 2) == 0);
     entry(&wire, 1, 7, "Browser", "web", true);
     entry(&wire, 1, 3, "Editor", "code", true);
-    assert(control(&wire, 116, 1, 0) == 1);
-    assert(bm_sophia_catalog_install(&model, menu, &wire.catalog));
+    assert(finish(&wire) == 1);
+    assert(bm_sophia_catalog_install_files(&model, menu, &wire.catalog));
     struct bm_sophia_raster *raster = bm_sophia_raster_new(640, 320, 1);
     struct bm_sophia_view view;
     assert(raster && bm_sophia_view_capture(raster, &model, &view));
@@ -195,9 +199,9 @@ static void painted_catalog_identity(void)
     assert(bm_sophia_view_capture(raster, &model, &view));
     assert(view.row_count == 1 && view.rows[0].slot == 7 && view.selected == 7);
     assert(!bm_sophia_view_edit(menu, 17, NULL, 0)); /* Accept is protocol-owned. */
-    assert(control(&wire, 114, 2, 1) == 0);
+    assert(begin(&wire, 2, 1) == 0);
     entry(&wire, 2, 4096, "New Browser", "web", true);
-    assert(control(&wire, 116, 2, 0) == 1 && bm_sophia_catalog_install(&model, menu, &wire.catalog));
+    assert(finish(&wire) == 1 && bm_sophia_catalog_install_files(&model, menu, &wire.catalog));
     assert(bm_sophia_view_capture(raster, &model, &view));
     assert(view.catalog_generation == 2 && view.row_count == 1 && view.selected == 4096);
     assert(old.catalog_generation == 1 && old.rows[0].slot == 7 && old.rows[1].slot == 3 && old.selected == 3);

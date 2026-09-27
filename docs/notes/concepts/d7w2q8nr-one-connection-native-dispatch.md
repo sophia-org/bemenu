@@ -5,6 +5,10 @@ tags: [native, ownership, ipc]
 ---
 # One connection dispatches catalog, upload and presented input
 
+Historical IPC design and evidence. The owner described here was removed in
+the [9P-only launcher change](../plans/b6m2n8cp-native-launcher.md#9p-only-launcher-2026-09-27);
+the current executable uses the SDK's file session and native lifecycle.
+
 The Bemenu connection owner composes the published C owners instead of adding a
 second transport or reimplementing focus/input checks. It owns one receive buffer,
 one outbound FIFO, a shared transaction source, catalog assembly plus installed

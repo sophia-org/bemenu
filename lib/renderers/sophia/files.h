@@ -27,8 +27,8 @@ struct bm_sophia_files_snapshot {
      * upstream menu counts them. views: resources not yet released. */
     unsigned displayed, views, edits;
 };
-/* Native launcher over the shell file export at an endpoint the caller already
- * selected (sophia_desktop_select_shell with the files wire). No discovery,
+/* Native launcher over the shell file export at the caller's explicit 9P
+ * socket path. No discovery,
  * fallback or reconnect. The menu is borrowed: empty, configured, default key
  * mode; this adapter installs only the Session catalog into it. The adapter
  * owns the connected fd and every SDK owner. Returns sophia_9p_result codes. */

@@ -300,3 +300,43 @@ one edit and one keyboard activation. Evidence: adoption worktree
 `.artifacts/sdk-isolated-a0ab8c8.log` and Sophia development evidence
 `bemenu-files/{prepare-fc79f64,live-fc79f64}.log`. The integration remains local;
 publication, installation and attended acceptance are separate.
+
+### 9P-only launcher, 2026-09-27
+
+The operator retired Bemenu's IPC path. The native executable now requires a
+nonempty `SOPHIA_SHELL_9P_SOCKET` and refuses any presence of
+`SOPHIA_SHELL_SOCKET`, including an empty value or both variables together.
+The r7 capability request remains `0x9a0`, and the file negotiation record is
+unchanged: `bemenu_native status=negotiated revision=7 epoch=N wire=9p`.
+
+The old connection owner, IPC catalog entry point and IPC-only test targets
+are removed. The existing file adapter continues to use the standalone C SDK's
+session and native lifecycle. The immutable SDK snapshot still contains its
+optional compatibility sources for other consumers; this product builds with
+`WITH_IPC=0` and links only the desktop and 9P archives. An executable symbol
+check rejects linkage of legacy shell or WM entry points.
+
+Catalog menu, copied-string ownership, allocation-refusal, filter and Cairo
+assertions use file catalog objects. The file adapter tests retain input,
+activation, retirement, close/invalidation and reopen coverage. SDK file tests
+cover framing, records, custody and event acknowledgements. The independent
+executable fixture is ported to 9P, preserving the wrong-revision and startup
+refusal checks and two close/reopen allocation exchanges. These are supplied
+Session outcomes; the external production-owner gate remains separate.
+
+The strict gate passed on the first run in a private source copy with
+`make -j2 check-sophia EXTRA_WARNINGS=-Werror`, nice 19, devices and network
+hidden, no display environment and only two isolated DejaVu fonts. All seven
+SDK file tests, 16 spec digests, the menu and adapter tests, six snapshot
+mutations, layout, executable, font and CPU raster checks passed. The executable
+fixture proved two openings, wrong-revision refusal, a bounded startup wait and
+rejection of every retired-variable combination. Its symbol check found no
+linked legacy shell or WM entry points. Evidence and the copied input inventory
+are in `~/.local/state/sophia/development-evidence/bemenu-9p-only/`.
+
+The C SDK pin remains `a0ab8c853fe56b68e01ae69b82d06c15fc177484`.
+The external artifact must be prepared from the new signed Bemenu commit and
+its 9P production-owner test rerun; the IPC integration tests are retired. No
+current session, installed release or upstream X11/Wayland/curses backend was
+changed. The earlier IPC evidence above is historical and does not describe
+the new executable.
