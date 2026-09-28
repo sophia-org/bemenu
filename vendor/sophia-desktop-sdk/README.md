@@ -16,6 +16,7 @@ Then replace `source/` from `git archive <exact revision>`, save
 SHA-256 file manifest with that revision, and run the snapshot check and C gates.
 Do not edit the snapshot or use a moving branch as its identity.
 
-This pin is the same signed development revision gated by Sophia's production
-export tests. Publication awaits GitHub authentication; no released version is
-claimed. This snapshot does not require network access.
+This pin is a signed development revision on the SDK's public master branch.
+Sophia's production export tests and Bemenu's isolated strict gate cover this
+revision. Those fixtures do not establish live desktop acceptance. This
+snapshot does not require network access.
