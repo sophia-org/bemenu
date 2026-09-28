@@ -233,8 +233,9 @@ stage(struct bm_sophia_files *f, const struct sophia_ns_obligations *o)
     if (!bm_sophia_view_capture(f->raster, &f->model, &view))
         return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_RENDER, SOPHIA_9P_INVALID);
     size_t row = (size_t)view.width * 4, bytes = row * view.height;
-    uint32_t payload = l->max_frame_payload > 48 ? l->max_frame_payload - 48 : 0;
-    size_t rows = smaller(payload, l->max_chunk_bytes) / row;
+    /* The SDK has validated Limits. File uploads use the chunk budget;
+     * socket envelope sizes do not determine a resource's row groups. */
+    size_t rows = l->max_chunk_bytes / row;
     if (view.stride != row || view.row_count > l->max_candidate_targets || view.row_count > SOPHIA_NS_ROWS ||
         bytes > l->max_resource_bytes || !rows)
         return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_RENDER, SOPHIA_9P_INVALID);

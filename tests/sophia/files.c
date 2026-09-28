@@ -47,6 +47,8 @@ const uint8_t *peer_uploaded(size_t *bytes);
 #define ALLOC_GEN 22u
 #define EPOCH_P 9u
 
+static uint32_t upload_chunk_limit = 65488;
+
 struct ctx {
     struct bm_menu *menu;
     struct bm_sophia_files *f;
@@ -69,7 +71,7 @@ limits(void)
     l.max_session_retiring_bytes = 67108864;
     l.pixel_format_mask = 1;
     l.max_frame_payload = 65536;
-    l.max_chunk_bytes = 65488;
+    l.max_chunk_bytes = upload_chunk_limit;
     l.max_width_px = 8192;
     l.max_height_px = 4096;
     l.max_live_resources = 8;
@@ -399,7 +401,7 @@ uploaded(struct ctx *c)
         pass(c, 1);
     assert(peer_count(SOPHIA_SF_RESOURCE_END) == ends + 1);
     /* Canonical chunks: whole row groups, the last one the remainder. */
-    size_t rows = 65488 / ((size_t)v.width_px * 4), chunk = rows * v.width_px * 4, bytes;
+    size_t rows = upload_chunk_limit / ((size_t)v.width_px * 4), chunk = rows * v.width_px * 4, bytes;
     assert(peer_chunks() == v.chunk_count && v.chunk_count == (v.height_px + rows - 1) / rows);
     for (unsigned i = 0; i + 1 < peer_chunks(); ++i)
         assert(peer_chunk_size(i) == chunk);
@@ -717,6 +719,10 @@ main(void)
     test_permit_expiry();
     test_lost_ack();
     test_guards();
+    /* Leave spare frame capacity: the full lifecycle, including each upload's
+     * chunk-count and byte checks, must obey this smaller file budget. */
+    upload_chunk_limit = 32768;
+    test_lifecycle();
     puts("sophia files adapter unit: ok (supplied peer outcomes; not live or physical evidence)");
     return 0;
 }
