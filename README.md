@@ -19,7 +19,7 @@ C desktop SDK. It uses only 9P2000.L: Session must supply
 variable is refused, including an empty value. Application activation remains
 Session's responsibility.
 
-Run `make -j2 check-sophia EXTRA_WARNINGS=-Werror` for the file transport,
+Run `make -j"$(nproc)" check-sophia EXTRA_WARNINGS=-Werror` for the file transport,
 menu, input and CPU raster checks. The fixtures supply Session outcomes; this
 gate does not prove physical presentation. The upstream backends below are
 unchanged.
