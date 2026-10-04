@@ -1,37 +1,39 @@
 # WM files over 9P2000.L
 
 Status: implementation contract for the t249 and Hagia h006 development
-candidates; full role acceptance remains open. The existing WM IPC remains
-the default. This document specifies the WM role only;
-output control still uses its separately admitted existing IPC connection.
+candidates; latency qualification remains open. Session uses only the WM file
+transport. This document specifies the WM role only;
+output control uses the separately admitted [output file role](sophia-output-files.md).
 The first checkpoint is a direct Unix socket, not a kernel mount.
 
 ## Explicit Session selection
 
 Session selects the WM transport with
-`--wm-transport=current-ipc|9p2000.L`. Omission selects `current-ipc`; an
+`--wm-transport=9p2000.L`. Omission selects 9P2000.L; `current-ipc` is refused. An
 explicit selection requires a configured WM using the existing
 `sophia_wm_v1` semantic interface. The interface name does not select the wire.
-The profile schema and output-role transport are unchanged.
+The profile schema is unchanged. Output uses 9P2000.L under its own assignment.
 
-A protected launch receives only the selected WM socket variable:
-`SOPHIA_WM_SOCKET` for current IPC or `SOPHIA_WM_9P_SOCKET` for files. The
-existing cleared launch environment removes inherited alternatives. The
-output socket, staged policy candidate and checkpoint keep their existing
-grants. The WM must not sniff the protocol or fall back to the other socket;
+A protected launch receives `SOPHIA_WM_9P_SOCKET`. The cleared launch environment
+removes the retired `SOPHIA_WM_SOCKET` and inherited alternatives. The
+staged policy candidate and checkpoint keep their existing grants. The WM
+receives no output endpoint or output-authority grant. It must not sniff the
+protocol or fall back to another socket;
 ambiguous client selection refuses.
 
 The selected transport is retained through automatic restart, control restart
 and profile rollback. Each replacement receives a fresh admitted epoch. One
 checked qid allocator belongs to the logical Session WM filesystem and continues
 across those replacements; recreating a socket never resets it. Exhaustion
-refuses allocation. The existing output acceptance pause and supervised-PID
-replacement barrier still precede the replacement worker.
+refuses allocation. Output supervision has its own epoch and lifetime; a WM
+restart does not replace the output assignee or cancel its work.
 
-Rollback to current IPC is an explicit subsequent launch selection with its
-compatible WM and profile. A failed file negotiation or profile activation
-does not select another transport. File diagnostics identify
-`sophia_wm_fs_v1`; current-IPC diagnostics retain `sophia_wm_v1`.
+Rollback selects a previously verified complete release with its compatible WM
+and profile for a subsequent login. It does not select an IPC backend in this
+build. A failed file negotiation or profile activation closes the attempt;
+diagnostics identify `sophia_wm_fs_v1`. See the accepted
+[source-retirement decision](notes/decisions/twkn9fsp-retire-wm-and-shell-ipc-with-release-rollback-while-latency-qualification-remains-open.md).
+The latency budgets and failed qualification campaign remain unchanged.
 
 The Session production entrypoints have focused protected-child checks. The
 independent production Hagia loop, combined output restart and real Session/
@@ -44,7 +46,7 @@ for exact checkpoints and limits.
 Session creates the endpoint for one supervised, protected WM launch. The
 existing admission owner binds the accepted peer and connection epoch before
 the export becomes accessible. There is one WM writer. The endpoint cannot be
-used alongside a current-IPC WM writer or acquire authority from `uname`,
+used alongside another WM writer or acquire authority from `uname`,
 `aname`, a numeric UID, a fid or a qid. An unauthorized second attach refuses;
 cloning the admitted root does not create another role or epoch.
 
@@ -54,7 +56,10 @@ The server publishes its admitted epoch, API range, capability ceiling and
 object limits. A client submits disjoint required and optional capability masks
 before profile handoff. The existing admission owner intersects their union
 with the supported set and Session ceiling, then removes presentation actions
-without surface instances and output launch context without launch origin.
+without surface instances, output launch context without launch origin, and
+action lifecycle without both actions and configuration, chord actions
+without action lifecycle, actions and configuration, and held capture without
+both surface instances and presentation actions.
 If any required bit is absent after these reductions, including an unknown
 required bit, admission fails and closes the endpoint without a Negotiated
 event. A malformed offer is refused before submission custody. Native presentation
@@ -106,7 +111,7 @@ mutations refuse; `Tread` on the root remains `EISDIR`.
 | Path | Access | Meaning |
 | --- | --- | --- |
 | `/` | 0500 | Fixed directory vocabulary; stateless enumeration cookies |
-| `api` | read | Small immutable ASCII family/version, with `output_transport=current_ipc` |
+| `api` | read | Exact ASCII `sophia-wm-files version=1 output_transport=9p2000.L\n` |
 | `limits` | read | Immutable binary epoch, capabilities and bounds |
 | `snapshot` | read | Latest complete binary scene; open pins that exact immutable object |
 | `events` | read | Ordered binary records, read by byte offset and retained until explicit acknowledgement |
@@ -115,6 +120,9 @@ mutations refuse; `Tread` on the root remains `EISDIR`.
 | `ack` | write | Acknowledgement of a complete event sequence number |
 
 Opening `snapshot` with no complete snapshot available returns `EAGAIN`.
+The API line includes its final newline. Clients requiring this release refuse
+the retired `output_transport=current_ipc` value; no compatibility fallback is
+provided. Release rollback restores a compatible Session and client together.
 At most one snapshot fid and one candidate buffer may be pinned per attach.
 Repeated opens of other files share the same attach-owned bounds. `getattr`
 reports the pinned snapshot length and qid, not a later scene's length. Reads
@@ -315,10 +323,138 @@ filesystem qid allocator continues across epochs.
 The Cycle event has a 48-byte prefix, the affected output IDs and one exact
 cause body. It names both the immutable snapshot transaction and the separate
 request transaction/request ID. File cause codes are SceneChanged=0, Action=1,
-Focus=2, PointerFocus=3, Interaction=4, OutputAction=5 and PresentationAction=6.
+Focus=2, PointerFocus=3, Interaction=4, OutputAction=5, PresentationAction=6,
+ActionLifecycle=7 and ChordAction=8.
 These are file codes: legacy PointerFocus/Interaction numbering must not be
 copied. Geometry fields are signed 32-bit values; the shared semantic validator
 enforces the interaction-specific rules.
+
+### Chord lifecycle
+
+With `action_lifecycle` selected, a Configuration may carry up to 256
+`ConfigurationActionLifecycle` rows. Each row names one catalog action that is
+not a session operation, at most once, with `held_ms` 0 or 50 to 5000 and
+`reserved` 0; anything else refuses the Configuration. Session then reports the
+chord behind that action's keyboard activations. Other actions, and activations
+from presentation, indicators or control, get no lifecycle.
+
+With `chord_actions` selected as well, Session sends each admitted keyboard
+activation that opens or joins a followed chord as ChordAction instead of
+Action. `activation_serial` names that activation and `chord_serial` the
+chord's first admitted activation: the opener carries equal serials, and each
+join carries its own `activation_serial` with the opener's `chord_serial`. Held
+and Ended for the chord name that same `chord_serial` in their
+`activation_serial`. A client can therefore distinguish followed activations
+from ordinary Actions and correlate each with its chord's single terminal,
+including overlapping chords of the same action on different seats. Serials
+are opaque correlations within the connection epoch, never an origin or a
+time. ChordAction requires `actions`, `configuration`, `action_lifecycle` and
+`chord_actions`. It grants no session-operation authority, since a declared
+action is never a session operation.
+
+The opening chord fixes lifecycle eligibility under the rules below. While
+`chord_actions` is selected, joins of a followed chord remain ChordAction even
+if a replacement Configuration removes its declaration. Keyboard activations
+that neither open nor join a followed chord keep their ordinary cause kind, as
+does every activation from presentation, indicators or control; those carry no
+lifecycle. Without `chord_actions` followed activations remain Action, exactly
+as before, and a client that selected only `action_lifecycle` never receives
+ChordAction.
+
+Where the rules below speak of a chord's Actions, they include its ChordAction
+activations when `chord_actions` is selected. Admitted counts, opener refusal,
+first-in first-out order, the eight credits and the one Ended per chord are
+unchanged: a join reserves no credit and creates no second terminal.
+
+A chord opens when a declared action fires from the keyboard. It keeps the
+`held_ms` and eligibility of the row it opened under until it ends: replacing
+the Configuration neither alters nor ends an open chord, and only chords opened
+afterwards follow the new rows. Further activations of the same action while
+the chord is open join it. `count` is the number of the chord's Actions that
+were admitted; an activation refused by either input queue is not counted. It
+saturates at 0xffffffff. `activation_serial` always names the chord's first
+admitted Action, so a client can match every lifecycle cause to that Action;
+a press whose Action is not admitted opens no chord and reports nothing.
+
+A chord is held by keys, and the chord that opened decides which. If its
+opening press had modifiers, the chord is held while any modifier key is down
+on the seat, including modifiers pressed after it fired. Otherwise it is held
+while any trigger key of its admitted Actions is down: the opener's, and each
+joining press adds its own, from any keyboard on the seat. Modifiers stay with
+the focused client; the chord never consumes them. So a tap fires the Action
+and then Ended(released) on the trigger's release. Alt held over Alt+Tab and
+Alt+Shift+Tab gives two chords that are released together when the last
+modifier goes up, in either order: Shift then Alt ends both at Alt, Alt then
+Shift ends both at Shift. Chords that end together are reported in the order
+they opened.
+
+A sequence leader is the exception. A declared action that fires on a leader
+press, such as `Super+w` before `Super+w k`, opens a chord that keys do not
+hold. It lasts until its sequence completes, is abandoned or expires, or until
+it is cancelled, so releasing Super during the sequence ends nothing.
+
+`Held` is phase 1 with reason 0. It is sent at most once, when the chord is
+still open `held_ms` after it opened, and never when `held_ms` is 0. `Ended` is
+phase 2 and is sent exactly once per opened chord, as its last cause:
+
+- 1 released: a chord held by keys is no longer held;
+- 2 cancelled: a VT switch, device removal, a shortcut registry change, a
+  seat reset, or keyboard routing leaving Session ended it first;
+- 3 completed, 4 aborted, 5 timed out: a leader's sequence finished, was
+  abandoned, or expired. Only leaders end this way, and leaders never end
+  released.
+
+Every other phase and reason pairing, and `count` 0, is malformed.
+
+Each WM connection epoch has eight lifecycle credits. Admitting a chord's
+first Action takes one. The credit is held while the chord is open and while
+its Ended waits, and it returns only when Session successfully hands that Ended
+to the WM as the in-flight Cycle; removing it from a queue, or a handoff that
+fails, returns nothing. So open chords plus Ended causes still waiting in
+Session share eight credits; one further Ended may be the in-flight Cycle under
+the existing bounded transport custody. This holds however slowly the WM
+consumes Cycles, and however many chords open, end, or are cancelled
+meanwhile. While no credit is free, a press
+that would open a new chord is still consumed as a shortcut, but Session
+queues no Action for it and opens no chord. A press that joins an open chord
+needs no credit: its Action is ordinary input under the physical bounds.
+Ending a chord early never frees its credit. A new epoch discards every open
+chord and every pending lifecycle cause without a cause, and restores all
+eight credits, because those Actions belonged to the old epoch.
+
+Actions, Held and Ended keep their relative order, and their order against
+other ordinary queued causes. The opening Action is delivered before any Held
+or Ended for its chord, Held before Ended, and nothing for a chord follows its
+Ended. Session's existing priority security cancellation is still queued ahead
+of ordinary causes and may pass them. It never reorders them among themselves,
+and it takes or returns no credit. Ended is exempt from the input queue bounds,
+since the credits bound it. That exemption lets it enter a full queue but
+never lets it pass an ordinary cause queued before it. Held is not
+exempt: when a bound drops it, its chord still ends. A Configuration being
+replaced holds the queue as a whole, which delays them all equally.
+
+### Held capture
+
+With `held_capture` selected, a presentation whose covered outputs are all
+Overlay may name a keyboard output and carry bindings, as a replacement
+presentation does. Held capture requires `surface_instances` and
+`presentation_actions`. It lets a WM take keys while a chord is held, for
+example to cancel or confirm a switcher, without replacing applications.
+
+An Overlay keyboard capture never takes a modifier key. Shift, Control, Alt
+and Super presses and releases keep their ordinary routing, so the focused
+client sees both edges and chords end as they would without the capture.
+Every other press within the capture's scope is matched exactly against the
+bindings: a match is a presentation action, and an unbound key is consumed
+and reaches no client. A consumed press keeps its release.
+
+Chord-followed presses, such as a further Tab of a held Alt+Tab, still belong
+to the shortcut authority, and recovery and session controls keep precedence.
+A held modifier does not delay the capture. Any other key an application
+already holds does, until it is released, so an application sequence keeps
+its owner. A publication that mixes Overlay and replacement outputs with a
+keyboard output is malformed. Without `held_capture`, an Overlay keyboard
+output refuses the publication.
 
 Dirty and session-operation candidates, their typed outcomes and presentation
 receipts have bounded complete bodies in the same schema. Strict neutral
@@ -387,7 +523,8 @@ pressure, shutdown, and no extra commit or receipt from an acknowledgement.
 
 The paired executable checkpoint joins real Hagia with existing Session
 prepare/commit and backend receipt owners. It covers the current capability
-matrix, restart/profile rollback and all-output/topology behavior. Output IPC
-must remain labelled in evidence. Simulated completion, direct sockets and
-physical acceptance are distinct. Compare identical old/new workloads before
-claiming a performance gain or proposing retirement of current IPC.
+matrix, restart/profile rollback and all-output/topology behavior. Output
+evidence names the independent 9P assignment. Simulated completion, direct
+sockets and physical acceptance are distinct. Compare identical workloads
+before claiming a performance gain; source retirement alone makes no latency
+or physical acceptance claim.

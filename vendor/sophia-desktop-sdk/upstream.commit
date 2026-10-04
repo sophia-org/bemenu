@@ -1,13 +1,32 @@
-tree 3f2634b41360fd502caf8270608dc84372764418
-parent 4690786c929e3a221ee5d2793708fe4b43870c5b
-author Mason Green <mason@greenm01.net> 1790570221 -0400
-committer Mason Green <mason@greenm01.net> 1790570221 -0400
+tree b36aade0539d2e03c2298ef071cd14ca6bb46a5c
+parent 955a18c093fb003321fc67a624ba0478c11697de
+author Mason Green <mason@greenm01.net> 1791072228 -0400
+committer Mason Green <mason@greenm01.net> 1791072568 -0400
 gpgsig -----BEGIN PGP SIGNATURE-----
  
- iHUEABYIAB0WIQR+I2QUnoHdebKT6m9XGEu2KoAAYgUCarnu7QAKCRBXGEu2KoAA
- YuadAP4oA1/cESnJn1AOrMV148SXSHNozAjSc1D/GPPIPLRZPAD9Eqf433ZmJbXv
- IeFkpOiczQEIUaPK9mRFzZZdlJhR9Ag=
- =JSzz
+ iJEEABYIADkWIQR+I2QUnoHdebKT6m9XGEu2KoAAYgUCasGZOBsUgAAAAAAEAA5t
+ YW51MiwyLjUrMS4xMiwyLDIACgkQVxhLtiqAAGIC7AEAt6Lq9vDu6ohxZuPhP/vU
+ tMQ3LUDoX52pcvYWbiofobEBAOeYeOI/s32tcA0QLZE3i2Y6Wt6dJ0hHDn0FQ9Sd
+ YhgG
+ =XdO6
  -----END PGP SIGNATURE-----
 
-Pin the explicit persistent identity contract
+Release C SDK 0.8.0 with an experimental lock provider role
+
+The lock provider contract (sophia-lock-files-v1.kdl, sophia-lock-files.md
+and its golden records) was imported unmodified from Sophia fd6ea7538. It is
+byte-identical at Sophia's signed master merge
+61d545c9087a685c5161f0d5f3132436aa82d31e, which this release names as its
+contract revision. Every other spec copy also matches that master. The
+copied contract still marks itself revision 1 (draft), so the lock API is
+experimental until Sophia accepts it explicitly.
+
+The release adds sophia_lock_files.h (sophia_lf_*, the record codec) and
+sophia_lock_client.h (sophia_lc_*, a nonblocking provider client). No
+existing header, structure or symbol changes. struct sophia_lc_client holds
+the 9P client by pointer, embeds the existing sophia_9p_handle in its
+operation slots, and otherwise embeds new lock record types.
+
+compatibility.json declares lock_files false until the contract is accepted
+and Sophia's permanent production lock export harness passes with this
+release vendored. Upload pipelining remains a follow-up.

@@ -16,7 +16,8 @@ Then replace `source/` from `git archive <exact revision>`, save
 SHA-256 file manifest with that revision, and run the snapshot check and C gates.
 Do not edit the snapshot or use a moving branch as its identity.
 
-This pin is a signed development revision on the SDK's public master branch.
+This pin is the signed C SDK v0.8.0 release on the SDK's public master branch.
+Its lock provider role is experimental and unused by Bemenu.
 Sophia's production export tests and Bemenu's isolated strict gate cover this
 revision. Those fixtures do not establish live desktop acceptance. This
 snapshot does not require network access.

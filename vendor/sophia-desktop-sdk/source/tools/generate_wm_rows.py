@@ -1,21 +1,15 @@
 #!/usr/bin/env python3
-"""Generate neutral fixed WM rows from the pinned file contract; never IPC frames.
-
-Rows come from the `row-layouts` block of spec/sophia-wm-files-v1.kdl. While
-the socket compatibility library remains, generation also checks that the
-frozen rows in spec/sophia-wm-v1.kdl agree; that schema defines nothing here.
-"""
+"""Generate neutral fixed WM rows from the pinned file contract."""
 import pathlib
 import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCHEMA = "spec/sophia-wm-files-v1.kdl"
-LEGACY = "spec/sophia-wm-v1.kdl"
 HEADER = "src/sophia_wm_records.h"
 SOURCE = "src/wm_files/rows.c"
 ORDINARY_ROWS = 8
-EXTENSION_ROWS = 14
+EXTENSION_ROWS = 15
 EXTENSION_FLOOR = 0xFF00
 HEADER_PROPS = ("interface-major", "interface-revision", "max-outputs",
                 "max-surfaces", "max-bindings")
@@ -201,10 +195,13 @@ def read_rows(text):
     return rows
 
 
-def check_legacy(rows, text):
-    """Refuse drift between the file rows and the frozen socket compatibility rows."""
-    if collect(protocol(parse(text), "sophia_wm_v1")) != rows:
-        raise SchemaError("frozen WM socket rows differ from the authoritative WM file rows")
+
+def row_family(name, transfer):
+    """The record family a row travels in. The contract reads lifecycle
+    interest only in a Configuration, though its rows use snapshot transfer."""
+    if name == "configuration_action_lifecycle":
+        return "SOPHIA_WF_CONFIGURATION"
+    return {"snapshot": "SOPHIA_WF_SNAPSHOT", "projection": "SOPHIA_WF_PROJECTION"}[transfer]
 
 
 def snake(value):
@@ -268,7 +265,6 @@ def render(rows):
         c += ["    memcpy(dst, p, sizeof(p));", "    return 0;", "}"]
     c += ["int wf_row_layout(uint16_t family, uint16_t kind, size_t *width,",
           "                  uint32_t *maximum, uint64_t *capabilities)", "{"]
-    families = {"snapshot": "SOPHIA_WF_SNAPSHOT", "projection": "SOPHIA_WF_PROJECTION"}
     caps = {"snapshot_action": "ACTIONS", "snapshot_session_operation": "SESSION_OPERATIONS",
             "projection_indicator": "INDICATORS", "projection_output_status": "INDICATORS"}
     for name, family, kind, gate, maximum, size, fields in table:
@@ -278,7 +274,9 @@ def render(rows):
             cap_expr += " | SOPHIA_WF_CAP_LAUNCH_ORIGIN"
         if cap == "PRESENTATION_ACTIONS":
             cap_expr += " | SOPHIA_WF_CAP_ACTIONS | SOPHIA_WF_CAP_SURFACE_INSTANCES"
-        cond = f"family == {families[family]} && kind == {kind}u"
+        if cap == "ACTION_LIFECYCLE":
+            cap_expr += " | SOPHIA_WF_CAP_ACTIONS | SOPHIA_WF_CAP_CONFIGURATION"
+        cond = f"family == {row_family(name, family)} && kind == {kind}u"
         if name == "snapshot_action":
             cond = f"(family == SOPHIA_WF_SNAPSHOT || family == SOPHIA_WF_CONFIGURATION) && kind == {kind}u"
         c += [f"    if ({cond}) {{", f"        *width = {size}; *maximum = {maximum};",
@@ -290,7 +288,7 @@ def render(rows):
                     if key.startswith("reserved")]
         if reserved:
             cond = " && ".join(f"wf_zero(p + {offset}, {width})" for offset, width in reserved)
-            c += [f"    if (family == {families[family]} && kind == {kind}u)",
+            c += [f"    if (family == {row_family(name, family)} && kind == {kind}u)",
                   f"        return {cond} ? 0 : -1;"]
     c += ["    return 0;", "}"]
     h += ["#endif", ""]
@@ -299,7 +297,6 @@ def render(rows):
 
 def generate(root=ROOT):
     rows = read_rows((root / SCHEMA).read_text())
-    check_legacy(rows, (root / LEGACY).read_text())
     return render(rows)
 
 
