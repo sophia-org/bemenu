@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <limits.h>
 
 /* The native launcher role: revision 7, bits 5, 7, 8 and 11 exactly. */
 static const struct sophia_ss_config session_config = {
@@ -28,20 +30,70 @@ bm_sophia_files_fail(struct bm_sophia_files *f, enum bm_sophia_files_stage stage
 }
 
 static int
-open_session(struct bm_sophia_files *f)
+open_role(struct bm_sophia_files *f)
 {
-    int fd = sophia_desktop_connection_take(&f->connection);
-    if (fd < 0)
-        return SOPHIA_9P_IO;
-    f->fd = fd;
-    f->connecting = false;
     struct sophia_ss_config config = session_config;
     config.object_storage = f->objects;
     config.object_capacity = SOPHIA_SF_MAX_RECORD;
-    int r = sophia_ss_open_fd(&f->ss, fd, &config, f->storage, f->storage_bytes);
+    int r = f->relay_fd >= 0 ?
+        sophia_ss_open_attached(&f->ss, &f->role, sophia_la_root(&f->auth),
+                                &config, f->storage, f->storage_bytes) :
+        sophia_ss_open_fd(&f->ss, f->fd, &config, f->storage, f->storage_bytes);
     if (r)
         return r;
     f->session = true;
+    return 0;
+}
+
+static int
+open_session(struct bm_sophia_files *f)
+{
+    f->fd = sophia_desktop_connection_take(&f->connection);
+    if (f->fd < 0)
+        return SOPHIA_9P_IO;
+    f->connecting = false;
+    if (f->relay_fd < 0)
+        return open_role(f);
+    size_t bytes = sophia_9p_storage_bytes(session_config.msize, 8);
+    f->role_storage = malloc(bytes);
+    f->relay_storage = malloc(bytes);
+    if (!f->role_storage || !f->relay_storage)
+        return SOPHIA_9P_BUSY;
+    int r = sophia_9p_init(&f->role, f->fd, session_config.msize, 8, 32, f->role_storage, bytes);
+    if (!r)
+        r = sophia_9p_init(&f->relay, f->relay_fd, session_config.msize, 8, 32, f->relay_storage, bytes);
+    if (!r)
+        r = sophia_la_init(&f->auth, &f->role, &f->relay, "shell", "launcher", f->now);
+    f->authenticating = !r;
+    return r;
+}
+
+/* Adopt before any connection can reuse an invalid inherited descriptor. */
+int
+bm_sophia_files_prepare_launch(int *relay_fd)
+{
+    if (!relay_fd)
+        return SOPHIA_9P_ARGUMENT;
+    *relay_fd = -1;
+    const char *value = getenv("SOPHIA_LAUNCH_AUTH_FD");
+    if (!value)
+        return 0;
+    if (!*value)
+        return SOPHIA_9P_ARGUMENT;
+    unsigned fd = 0;
+    for (; *value; ++value) {
+        if (*value < '0' || *value > '9' || fd > (INT_MAX - (unsigned)(*value - '0')) / 10)
+            return SOPHIA_9P_ARGUMENT;
+        fd = fd * 10 + (unsigned)(*value - '0');
+    }
+    if (fd < 3)
+        return SOPHIA_9P_ARGUMENT;
+    int flags = fcntl((int)fd, F_GETFD);
+    if (flags < 0)
+        return SOPHIA_9P_IO;
+    if (fcntl((int)fd, F_SETFD, flags | FD_CLOEXEC) < 0)
+        return SOPHIA_9P_IO;
+    *relay_fd = (int)fd;
     return 0;
 }
 
@@ -99,6 +151,7 @@ bm_sophia_files_new(struct bm_menu *menu, const char *endpoint, uint64_t now_ms,
         return SOPHIA_9P_BUSY;
     f->menu = menu;
     f->fd = -1;
+    f->relay_fd = -1;
     f->connection.fd = -1;
     f->upload = f->pending = f->shown = -1;
     f->next_resource = 1;
@@ -110,7 +163,9 @@ bm_sophia_files_new(struct bm_menu *menu, const char *endpoint, uint64_t now_ms,
     /* A launcher catalog object is up to 4 MiB; its rows borrow this scratch
      * only until the next fetch, so installation copies them at once. */
     f->objects = malloc(SOPHIA_SF_MAX_RECORD);
-    int r = f->storage && f->objects ? begin_connect(f) : SOPHIA_9P_BUSY;
+    int r = bm_sophia_files_prepare_launch(&f->relay_fd);
+    if (!r)
+        r = f->storage && f->objects ? begin_connect(f) : SOPHIA_9P_BUSY;
     if (r) {
         bm_sophia_files_dispose(f);
         return r;
@@ -202,6 +257,14 @@ bm_sophia_files_progress(struct bm_sophia_files *f, short revents, uint64_t now_
             return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_CONNECT, r);
         return guards(f);
     }
+    if (f->authenticating) {
+        r = sophia_la_service(&f->auth, now_ms, BM_SOPHIA_FILES_BYTES);
+        if (!r && sophia_la_ready(&f->auth)) {
+            r = open_role(f);
+            f->authenticating = false;
+        }
+        return r ? bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_NEGOTIATE, r) : guards(f);
+    }
     r = sophia_ss_dispatch(&f->ss, revents, BM_SOPHIA_FILES_BYTES, now_ms);
     if (r)
         return bm_sophia_files_fail(f, f->native ? BM_SOPHIA_FILES_STAGE_NATIVE :
@@ -248,6 +311,13 @@ bm_sophia_files_poll(const struct bm_sophia_files *f, uint64_t now_ms, struct po
         }
         return 0;
     }
+    if (f->authenticating) {
+        poller->fd = f->fd;
+        poller->events = POLLIN | (sophia_9p_wants_write(&f->role) ? POLLOUT : 0);
+        uint64_t due = sophia_la_next_wake(&f->auth);
+        *timeout_ms = smaller(*timeout_ms, due > now_ms ? due - now_ms : 0);
+        return 0;
+    }
     poller->fd = sophia_ss_poll_fd(&f->ss);
     poller->events = sophia_ss_poll_events(&f->ss);
     if (!poller->events)
@@ -275,6 +345,14 @@ bm_sophia_files_poll(const struct bm_sophia_files *f, uint64_t now_ms, struct po
         *timeout_ms = smaller(*timeout_ms, due > now_ms ? due - now_ms : 0);
     }
     return 0;
+}
+
+void
+bm_sophia_files_relay_poll(const struct bm_sophia_files *f, struct pollfd *poller)
+{
+    *poller = (struct pollfd){-1, 0, 0};
+    if (f && f->authenticating && !f->terminal)
+        *poller = (struct pollfd){f->relay_fd, POLLIN | (sophia_9p_wants_write(&f->relay) ? POLLOUT : 0), 0};
 }
 
 bool
@@ -312,6 +390,12 @@ bm_sophia_files_dispose(struct bm_sophia_files *f)
     /* Local end first: queued records become DROPPED_UNSENT; no replay. */
     if (f->session)
         sophia_ss_close(&f->ss);
+    if (f->authenticating)
+        sophia_la_cancel(&f->auth);
+    if (f->relay_fd >= 0)
+        close(f->relay_fd);
+    free(f->role_storage);
+    free(f->relay_storage);
     if (f->fd >= 0)
         close(f->fd);
     sophia_desktop_connection_close(&f->connection);

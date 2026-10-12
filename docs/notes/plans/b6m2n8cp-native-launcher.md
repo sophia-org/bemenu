@@ -354,3 +354,31 @@ its 9P production-owner test rerun; the IPC integration tests are retired. No
 current session, installed release or upstream X11/Wayland/curses backend was
 changed. The earlier IPC evidence above is historical and does not describe
 the new executable.
+
+### Authenticated launch migration, 2026-10-12
+
+The immutable SDK pin is signed development revision
+`73fe8106da63e1586ab5a900401fb051bb625464` (155 files), not a new release.
+Startup validates the advertised generation fd before font setup and sets
+CLOEXEC. The file adapter owns that fd, its two SDK wire clients and their
+storage. A bounded authentication phase polls the role and relay transports,
+then starts the shell client on the authenticated root. The generation relay
+survives through session disposal; failure never falls back to plain attach.
+The claim is `shell` / `launcher`, with identity selected by Session.
+
+The isolated, device-hidden `make check-sophia EXTRA_WARNINGS=-Werror` passes,
+including the SDK suite, exact snapshot/mutation checks, source layout, menu,
+file adapter, executable two-opening/timeout cases, fonts and CPU raster.
+New checks prove real CLOEXEC adoption and channel usability, closed-fd refusal,
+and executable-level malformed descriptor refusal before a role connection.
+The supplied ss unit peer explicitly refuses authenticated handoff; it does
+not pretend to prove a successful afid conversation. That production-owner
+join remains separate work. Upstream renderers and menu/raster policy are
+unchanged, and no live session or installed component changed.
+
+Evidence package `t317-bemenu-authentication-01` retains all four gate logs,
+dynamic candidate hashes and executable path/hash. Its manifest SHA-256 is
+`7f31e99a92c330f2465854d2f8ef77011b4b0351711f0d73b41b8e91964a284e`.
+The first two runs stopped at the old expected revision and file count;
+both were corrected to the verified snapshot, and the final gate passed.
+No binary was copied into evidence.

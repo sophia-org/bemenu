@@ -19,6 +19,15 @@ C desktop SDK. It uses only 9P2000.L: Session must supply
 variable is refused, including an empty value. Application activation remains
 Session's responsibility.
 
+When `SOPHIA_LAUNCH_AUTH_FD` is present, startup validates that inherited channel
+and marks it close-on-exec before font setup. The file adapter authenticates the
+`shell` / `launcher` claim through the SDK while polling both transports, then
+continues on the admitted root without another attach. It retains the generation
+channel until disposal. Invalid descriptors or failed authentication terminate
+startup; neither retries plain attach. Standalone supplied-endpoint fixtures
+without that variable retain their plain-attach path. This changes no menu,
+filtering, raster or application-launch authority.
+
 Run `make -j"$(nproc)" check-sophia EXTRA_WARNINGS=-Werror` for the file transport,
 menu, input and CPU raster checks. The fixtures supply Session outcomes; this
 gate does not prove physical presentation. The upstream backends below are

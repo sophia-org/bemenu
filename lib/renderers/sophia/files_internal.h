@@ -4,6 +4,7 @@
 #include "view.h"
 #include "../../../vendor/sophia-desktop-sdk/source/src/sophia_desktop_connection.h"
 #include <sys/un.h>
+#include "../../../vendor/sophia-desktop-sdk/source/src/sophia_launch_auth.h"
 
 #define BM_SOPHIA_FILES_GUARD_MS UINT64_C(5000)
 #define BM_SOPHIA_FILES_BYTES 65536u
@@ -46,6 +47,11 @@ struct bm_sophia_files {
     char endpoint[sizeof(((struct sockaddr_un *)0)->sun_path)];
     struct sophia_desktop_connection connection;
     int fd, terminal;
+    int relay_fd;
+    bool authenticating;
+    struct sophia_la_client auth;
+    struct sophia_9p_client role, relay;
+    void *role_storage, *relay_storage;
     enum bm_sophia_files_stage failed;
     bool connecting, session, native, clock_seen;
     uint64_t now, retry_at;

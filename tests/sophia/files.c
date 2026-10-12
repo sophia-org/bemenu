@@ -16,6 +16,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 /* files_peer.c: the scripted stand-in's control surface. */
 void peer_reset(const struct sophia_sf_limits *limits);
@@ -711,9 +712,34 @@ test_guards(void)
     stop(&c);
 }
 
+static void
+test_launch_descriptor(void)
+{
+    assert(!getenv("SOPHIA_LAUNCH_AUTH_FD"));
+    int fd = 99;
+    assert(!bm_sophia_files_prepare_launch(&fd) && fd == -1);
+    assert(bm_sophia_files_prepare_launch(NULL) == SOPHIA_9P_ARGUMENT);
+    int pair[2];
+    assert(!socketpair(AF_UNIX, SOCK_STREAM, 0, pair));
+    assert(!fcntl(pair[0], F_SETFD, 0));
+    char value[32];
+    assert(snprintf(value, sizeof(value), "%d", pair[0]) > 0);
+    assert(!setenv("SOPHIA_LAUNCH_AUTH_FD", value, 1));
+    assert(!bm_sophia_files_prepare_launch(&fd) && fd == pair[0]);
+    assert(fcntl(fd, F_GETFD) & FD_CLOEXEC);
+    assert(write(pair[1], "x", 1) == 1);
+    char byte;
+    assert(read(fd, &byte, 1) == 1 && byte == 'x');
+    close(pair[0]);
+    close(pair[1]);
+    assert(bm_sophia_files_prepare_launch(&fd) == SOPHIA_9P_IO && fd == -1);
+    assert(!unsetenv("SOPHIA_LAUNCH_AUTH_FD"));
+}
+
 int
 main(void)
 {
+    test_launch_descriptor();
     test_lifecycle();
     test_catalog_deferred();
     test_permit_expiry();

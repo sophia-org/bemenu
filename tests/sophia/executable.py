@@ -17,7 +17,8 @@ with tempfile.TemporaryDirectory(prefix='bemenu-executable-') as directory:
     shutil.copy2(root / 'bemenu-sophia', binary)
     env = dict(os.environ)
     for key in ('SOPHIA_SHELL_SOCKET', 'SOPHIA_SHELL_9P_SOCKET', 'DISPLAY',
-                'WAYLAND_DISPLAY', 'WAYLAND_SOCKET', 'BEMENU_BACKEND', 'BEMENU_RENDERER'):
+                'WAYLAND_DISPLAY', 'WAYLAND_SOCKET', 'BEMENU_BACKEND', 'BEMENU_RENDERER',
+                'SOPHIA_LAUNCH_AUTH_FD'):
         env.pop(key, None)
     symbols = subprocess.run(['nm', '--defined-only', binary], check=True,
                              capture_output=True, text=True, timeout=5).stdout
@@ -35,6 +36,24 @@ with tempfile.TemporaryDirectory(prefix='bemenu-executable-') as directory:
         refused = subprocess.run([binary, '--serve'], env=dict(env, **selection),
                                  capture_output=True, timeout=2)
         assert refused.returncode == 1 and b'stage=connect' in refused.stderr
+
+    auth_path = str(Path(directory) / 'auth.sock')
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
+        listener.bind(auth_path)
+        listener.listen(1)
+        listener.setblocking(False)
+        for value in ('', '0', '2', '-1', '+3', '3x', '2147483648', '2147483647'):
+            refused = subprocess.run([binary, '--serve'],
+                env=dict(env, SOPHIA_SHELL_9P_SOCKET=auth_path, SOPHIA_LAUNCH_AUTH_FD=value),
+                capture_output=True, timeout=2)
+            assert refused.returncode == 1 and b'stage=authentication' in refused.stderr
+            try:
+                connection, _ = listener.accept()
+            except BlockingIOError:
+                pass
+            else:
+                connection.close()
+                raise AssertionError('invalid launch descriptor reached the role socket')
 
     for mode in ('reopen', 'wrong_revision', 'startup_timeout'):
         path = str(Path(directory) / (mode + '.sock'))

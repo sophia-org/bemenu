@@ -3,7 +3,7 @@ sophia: bemenu-renderer-sophia.so bemenu-sophia
 
 SOPHIA_SDK = vendor/sophia-desktop-sdk/source
 SOPHIA_SDK_LIBS = .artifacts/desktop-sdk/libsophia-desktop.a .artifacts/desktop-sdk/libsophia-9p.a
-SOPHIA_SDK_INPUTS = $(wildcard $(SOPHIA_SDK)/src/*.h $(SOPHIA_SDK)/src/*.c $(SOPHIA_SDK)/src/nine_p/*.[ch] $(SOPHIA_SDK)/src/shell_files/*.[ch] $(SOPHIA_SDK)/src/shell_session/*.[ch] $(SOPHIA_SDK)/src/native_session/*.[ch])
+SOPHIA_SDK_INPUTS = $(wildcard $(SOPHIA_SDK)/src/*.h $(SOPHIA_SDK)/src/*.c $(SOPHIA_SDK)/src/nine_p/*.[ch] $(SOPHIA_SDK)/src/launch_auth/*.[ch] $(SOPHIA_SDK)/src/shell_files/*.[ch] $(SOPHIA_SDK)/src/shell_session/*.[ch] $(SOPHIA_SDK)/src/native_session/*.[ch])
 $(SOPHIA_SDK_LIBS) &: $(SOPHIA_SDK_INPUTS) $(SOPHIA_SDK)/GNUmakefile
 	$(MAKE) -C $(SOPHIA_SDK) WITH_IPC=0 BUILD=$(CURDIR)/.artifacts/desktop-sdk CFLAGS='-O2 -g -fPIC' $(addprefix $(CURDIR)/,$(SOPHIA_SDK_LIBS))
 
@@ -34,9 +34,10 @@ bemenu-renderer-sophia.so: lib/renderers/sophia/sophia.c $(SOPHIA_SOURCES) $(SOP
 	$(LINK.c) $(filter %.c,$^) $(SOPHIA_LIBS) -o $@
 
 # The unit fixture supplies ss outcomes. Keep the real ns and file codec, and
-# exclude the 9P archive so an accidental real session dependency fails to link.
+# real 9P and launch helpers link, but the supplied ss peer refuses authenticated
+# handoff: these unit cases do not stand in for a successful afid exchange.
 .artifacts/sophia-files-test: private override CPPFLAGS += $(SOPHIA_INCLUDES)
-.artifacts/sophia-files-test: tests/sophia/files.c tests/sophia/files_peer.c $(SOPHIA_FILE_ADAPTER) $(wildcard lib/renderers/sophia/files*.h) $(filter-out .artifacts/desktop-sdk/libsophia-9p.a,$(SOPHIA_SOURCES)) $(SOPHIA_HEADERS) util.a | libbemenu.so
+.artifacts/sophia-files-test: tests/sophia/files.c tests/sophia/files_peer.c $(SOPHIA_FILE_ADAPTER) $(wildcard lib/renderers/sophia/files*.h) $(SOPHIA_SOURCES) $(SOPHIA_HEADERS) util.a | libbemenu.so
 	mkdir -p .artifacts
 	$(LINK.c) -UNDEBUG $(filter %.c %.a,$^) $(SOPHIA_LIBS) -L. -lbemenu -o $@
 

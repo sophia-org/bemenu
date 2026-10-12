@@ -8,6 +8,10 @@
 struct bm_menu;
 struct bm_sophia_files;
 
+/* Validate a present SOPHIA_LAUNCH_AUTH_FD and set CLOEXEC before startup opens
+ * files. Returns a borrowed fd (-1 if absent); new() later adopts it. */
+int bm_sophia_files_prepare_launch(int *relay_fd);
+
 /* The first local step that ended the adapter, for diagnostics only.
  * INPUT also covers a lost acknowledgement for a content Action. */
 enum bm_sophia_files_stage {
@@ -31,13 +35,17 @@ struct bm_sophia_files_snapshot {
  * socket path. No discovery,
  * fallback or reconnect. The menu is borrowed: empty, configured, default key
  * mode; this adapter installs only the Session catalog into it. The adapter
- * owns the connected fd and every SDK owner. Returns sophia_9p_result codes. */
+ * owns the connected fd, any provisioned launch fd and every SDK owner.
+ * A present invalid launch fd or failed authentication never falls back to
+ * plain attach. Returns sophia_9p_result codes. */
 int bm_sophia_files_new(struct bm_menu *menu, const char *endpoint, uint64_t now_ms,
                         struct bm_sophia_files **out);
 /* What to wait for before the next progress call. A pollfd with fd -1 means
  * only the timeout, which is at most 50 ms; the loop never spins on it. */
 int bm_sophia_files_poll(const struct bm_sophia_files *files, uint64_t now_ms,
                          struct pollfd *poller, int *timeout_ms);
+/* Poll alongside the role fd during authentication; fd -1 otherwise. */
+void bm_sophia_files_relay_poll(const struct bm_sophia_files *files, struct pollfd *poller);
 /* One bounded serialized pass with CLOCK_MONOTONIC milliseconds: at most 64 KiB
  * each way, 16 events and one resource or frame step of each kind. 0 while
  * live; a terminal result latches and every later call returns it. Timeouts are

@@ -11,6 +11,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+int sophia_ss_open_attached(struct sophia_ss *s, struct sophia_9p_client *wire,
+                            uint32_t root, const struct sophia_ss_config *config,
+                            void *storage, size_t bytes)
+{
+    (void)s; (void)wire; (void)root; (void)config; (void)storage; (void)bytes;
+    assert(!"supplied session fixture cannot authenticate");
+    return SOPHIA_9P_INVALID;
+}
+
 #define PEER_EVENTS 96u
 #define PEER_LOG 128u
 #define PEER_UPLOAD (4u * 1024u * 1024u)

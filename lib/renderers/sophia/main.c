@@ -78,12 +78,13 @@ static int serve_files(struct bm_menu *menu, const char *path)
                     (unsigned long long)state.connection_epoch);
             announced = true;
         }
-        struct pollfd poller;
+        struct pollfd pollers[2];
         int timeout;
-        if (bm_sophia_files_poll(client.files,now,&poller,&timeout) < 0) {result = 1; break;}
-        int ready = poll(&poller,1,timeout);
+        if (bm_sophia_files_poll(client.files,now,&pollers[0],&timeout) < 0) {result = 1; break;}
+        bm_sophia_files_relay_poll(client.files,&pollers[1]);
+        int ready = poll(pollers,2,timeout);
         if (ready < 0 && errno != EINTR) {result = 1; break;}
-        revents = ready > 0 ? poller.revents : 0;
+        revents = ready > 0 ? pollers[0].revents : 0;
     }
     bm_sophia_files_dispose(client.files);
     menu->userdata = NULL;
@@ -105,6 +106,11 @@ int main(int argc, char **argv)
     const char *path = getenv("SOPHIA_SHELL_9P_SOCKET");
     if (getenv("SOPHIA_SHELL_SOCKET") || !path || !*path) {
         fputs("bemenu_native status=failed stage=connect transport=9p_required\n",stderr);
+        return 1;
+    }
+    int relay_fd;
+    if (bm_sophia_files_prepare_launch(&relay_fd)) {
+        fputs("bemenu_native status=failed stage=authentication\n",stderr);
         return 1;
     }
     const char *const font_directories[] = {"/usr/share/fonts", "/usr/local/share/fonts"};
