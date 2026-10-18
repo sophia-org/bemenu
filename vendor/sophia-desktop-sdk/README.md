@@ -17,8 +17,8 @@ SHA-256 file manifest with that revision, and run the snapshot check and C gates
 Do not edit the snapshot or use a moving branch as its identity.
 
 This pin is signed development revision
-`a1c41aa0217037b0578f6606f589ed9846ee9247`, including launch authentication,
-sealed image transfer and adoption into the native resource lifecycle.
+`25be47d4292db5da3f877f64d8cb782c43eb5d7c`, including launch authentication,
+ISB-only image transfer, atomic native adoption and bounded mapped buffers.
 It is not a new published release.
 Its lock provider role is experimental and unused by Bemenu.
 SDK/server joins and Bemenu's isolated strict gate have separate scopes;
