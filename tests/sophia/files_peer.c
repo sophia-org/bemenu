@@ -6,6 +6,8 @@
  * outcomes: no 9P transport, Session, compositor or display is involved, and
  * nothing here is live, physical or production evidence. */
 #include "../../vendor/sophia-desktop-sdk/source/src/sophia_shell_session.h"
+#include "../../vendor/sophia-desktop-sdk/source/src/sophia_shell_image.h"
+#include <unistd.h>
 #include <assert.h>
 #include <poll.h>
 #include <stdlib.h>
@@ -53,6 +55,8 @@ static struct {
     const uint8_t *chunk;
     size_t chunk_size, chunk_sent, write_step, received, chunk_sizes[64];
     uint8_t *uploaded;
+    struct sophia_ss_image *image;
+    uint64_t image_offer;
 } P;
 
 static size_t
@@ -151,6 +155,15 @@ peer_push(struct sophia_sf_record r)
     assert(!sophia_sf_encode(P.bytes[P.pushed], sizeof(P.bytes[0]), &r, &n));
     assert(!sophia_sf_decode(P.bytes[P.pushed], n, &P.events[P.pushed]));
     P.pushed++;
+    if (r.header.kind == SOPHIA_SF_RESOURCE_STATUS && P.image) {
+        const struct sophia_sf_resource_status *v = &r.value.resource_status;
+        enum sophia_ip_status status = v->status == 2 ? SOPHIA_IPS_ACCEPTED :
+                                       v->status == 3 ? SOPHIA_IPS_REJECTED :
+                                       v->status == 4 ? SOPHIA_IPS_CANCELLED : 0;
+        if (status)
+            assert(!sophia_ip_resource_status(&P.image->producer, v->resource_id,
+                                              v->resource_generation, status, 0, P.image->producer.last_now));
+    }
     if (r.header.kind == SOPHIA_SF_RESOURCE_STATUS && P.upload_pending &&
         r.value.resource_status.resource_id == P.begin.resource_id) {
         if (r.value.resource_status.status == 1) {
@@ -188,10 +201,11 @@ sophia_ss_open_fd(struct sophia_ss *s, int fd, const struct sophia_ss_config *c,
 {
     (void)s;
     assert(fd >= 0 && storage && bytes == 64 && c->profile == SOPHIA_SF_LAUNCHER);
-    assert(c->offer.minimum_revision == 7 && c->offer.maximum_revision == 7 &&
-           c->offer.required_capabilities == 0x9a0 && c->object_storage &&
+    assert(c->offer.minimum_revision == 9 && c->offer.maximum_revision == 9 &&
+           c->offer.required_capabilities == 0x29a0 && c->object_storage &&
            c->object_capacity == SOPHIA_SF_MAX_RECORD);
     P.fd = fd;
+    s->files.profile = SOPHIA_SF_LAUNCHER;
     P.state = SOPHIA_SS_NEGOTIATING;
     return 0;
 }
@@ -271,7 +285,7 @@ sophia_ss_reserve(struct sophia_ss *s, uint16_t slots, size_t bytes, struct soph
     P.reserved = 1;
     P.reserved_slots = slots;
     P.reserved_bytes = bytes;
-    *out = (struct sophia_ss_reservation){++P.serial, slots, bytes};
+    *out = (struct sophia_ss_reservation){s, P.epoch, ++P.serial, slots, bytes};
     return 0;
 }
 
@@ -464,3 +478,82 @@ sophia_ss_upload_chunk(struct sophia_ss *s, const void *bytes, size_t count)
 
 int sophia_ss_upload_ready(const struct sophia_ss *s) {(void)s; return P.state <= SOPHIA_SS_READY && P.upload_ready;}
 int sophia_ss_upload_pending(const struct sophia_ss *s) {(void)s; return P.state <= SOPHIA_SS_READY && P.upload_pending;}
+
+/* Supplied channel readiness and Source delivery for adapter unit tests.
+ * Real producer admission validates the sealed fd; the executable fixture
+ * separately exercises actual 9P discovery and SEQPACKET transport. */
+int sophia_ss_image_init(struct sophia_ss_image *image, const struct sophia_ss_image_config *config)
+{
+    memset(image, 0, sizeof(*image));
+    image->config = *config;
+    return 0;
+}
+int sophia_ss_image_attach(struct sophia_ss *s, struct sophia_ss_image *image)
+{
+    struct sophia_ip_config config = image->config.producer;
+    config.connection_epoch = P.epoch;
+    config.role = SOPHIA_IC_ROLE_SHELL;
+    config.revision = 9;
+    config.granted_kinds = SOPHIA_IC_KIND_BIT_SEALED;
+    assert(!sophia_ip_init(&image->producer, &config, 0));
+    image->session = s;
+    s->image = P.image = image;
+    image->started = 1;
+    image->producer.channel = SOPHIA_IPC_READY;
+    image->producer.max_offers = SOPHIA_IP_MAX_OFFERS;
+    image->producer.expect = (struct sophia_ic_expect){
+        .role = SOPHIA_IC_ROLE_SHELL, .connection_epoch = P.epoch,
+        .channel_generation = 1, .source_kinds = SOPHIA_IC_KIND_BIT_SEALED,
+        .max_width = config.bounds.max_width, .max_height = config.bounds.max_height,
+        .max_resource_bytes = config.bounds.max_resource_bytes,
+    };
+    return 0;
+}
+int sophia_ss_image_poll_fd(const struct sophia_ss_image *image) {(void)image; return -1;}
+short sophia_ss_image_poll_events(const struct sophia_ss_image *image) {(void)image; return 0;}
+int64_t sophia_ss_image_timeout(const struct sophia_ss_image *image, uint64_t now)
+{(void)image; (void)now; return -1;}
+int sophia_ss_image_dispatch(struct sophia_ss_image *image, short events, uint64_t now)
+{(void)image; (void)events; (void)now; return 0;}
+int sophia_ss_image_begin(struct sophia_ss_image *image, struct sophia_ic_metadata *m,
+                          int fd, uint64_t now, uint64_t *offer, uint64_t *ticket)
+{
+    uint8_t body[SOPHIA_IC_METADATA_BYTES];
+    if (P.submit_busy || P.reserved)
+        return SOPHIA_IPR_BUSY;
+    assert(m->admission_epoch == P.limits.grant_content_epoch);
+    int result = sophia_ip_begin(&image->producer, m, fd, now, body, offer);
+    if (result)
+        return result;
+    P.image_offer = *offer;
+    assert(m->logical_bytes <= PEER_UPLOAD);
+    assert(pread(fd, P.uploaded, m->logical_bytes, 0) == (ssize_t)m->logical_bytes);
+    P.received = m->logical_bytes;
+    for (unsigned i = 0; i < SOPHIA_IP_MAX_OFFERS; ++i)
+        if (image->producer.slots[i].metadata.offer == *offer)
+            image->producer.slots[i].state = SOPHIA_IPO_SENT;
+    /* A test-local geometry summary, not a byte-upload wire record. */
+    struct sophia_sf_record summary = {0};
+    summary.header.kind = SOPHIA_IC_IMAGE_BEGIN;
+    summary.value.resource_begin = (struct sophia_sf_resource_begin){
+        .transaction = *offer, .resource_id = m->resource_id, .resource_generation = m->resource_generation,
+        .width_px = m->width, .height_px = m->height, .total_bytes = m->logical_bytes,
+        .pixel_format = 1, .rendered_scale_numerator = 1, .rendered_scale_denominator = 1,
+    };
+    *ticket = peer_log_record(&summary);
+    return 0;
+}
+uint64_t peer_image_offer(void) {return P.image_offer;}
+void peer_image_release(void)
+{
+    struct sophia_ip_offer_info info;
+    struct sophia_ic_record record = {0};
+    assert(!sophia_ip_offer(&P.image->producer, P.image_offer, &info));
+    record.header.kind = SOPHIA_IC_SOURCE_RELEASED;
+    record.header.epoch = P.epoch;
+    record.value.released.offer = info.offer;
+    record.value.released.resource_id = info.resource_id;
+    record.value.released.resource_generation = info.resource_generation;
+    record.value.released.disposition = SOPHIA_IC_RETAINED;
+    assert(!sophia_ip_record(&P.image->producer, &record, P.image->producer.last_now));
+}

@@ -9,9 +9,29 @@ a Session afid owner. A generic role-view test joins the Rust SDK, real core,
 Factotum and a protected independent C relay peer. A separate owner-level
 join covers atomic admission into the actual lock-file export. The lock worker
 now uses authenticated dispatch in normal Session startup, exercised with a
-protected independent C wire peer and the reusable C SDK. Other role transports
-remain unmigrated. Their legacy credential and pidfd requirements remain in
-place; the lock path retains its expected-peer availability filter.
+protected independent C wire peer and the reusable C SDK. Normal WM, output,
+descriptor-shell, bar, launcher and dock startup also use the shared admission
+owner. Protected C and Rust SDK joins and separately supplied client joins
+are recorded in the [qualification investigation](notes/investigations/etyvymxi-authenticated-attach-transport-state-and-factotum-handoff.md).
+Final candidate qualification and integration remain separate from these
+checkpoints; this document does not claim a live installation.
+
+### Transport boundaries
+
+| Interface | Admission in this candidate |
+| --- | --- |
+| Supervised WM, lock, output, descriptor shell, bar, launcher and dock | Factotum-correlated afid plus current Session launch custody and namespace admission. Expected-peer acceptance remains an availability filter. |
+| Private Session–Factotum control and provisioned child relay | Session-owned channels with their own fixed views; neither is an anonymously accessible role endpoint. |
+| Live portal requester | The approved protocol-authority socketpair custody model, bound to an adopted connection and exact namespace pair. No protected-process or afid claim. |
+| Metadata broker and administrative control | Existing protected-broker and HostDomain admission on legacy transports. Their file migrations remain t314 and t254 respectively. |
+| X11 applications | Existing X authority admission; t317 does not replace it with afids. |
+
+The [portal contract](sophia-portal-files.md#admission-and-functionality)
+does not yet integrate an out-of-process protected requester. Its generic
+protected-peer export tests do not establish such a live owner. The
+[delivery plan](notes/plans/jsschoen-converge-public-roles-on-one-9p-core.md)
+retains these separate migrations and namespace composition. Authentication
+of the supervised roles does not imply that every Sophia transport uses afids.
 
 ```text
                  Session (trusted admission owner)
@@ -33,7 +53,7 @@ place; the lock path retains its expected-peer availability filter.
              channel-attested nonce             | correlated verdict
                               |                 v
    child -- P --> Session relay          Session final custody check
-      ^          (joined in tests)       + immutable identity pin
+      ^                                  + immutable identity pin
       |                                       |
       +-- nonce read on own afid -------------+--> admitted role view
 ```
@@ -72,9 +92,10 @@ invalidates the shared ingress so its connection owner closes the actual
 Factotum transport. A transport owner must poll even without peer traffic,
 close an expired transport, and retain its bounded slot until cleanup drains.
 Tversion preserves the identity pin and original first-attach deadline.
-The lock transport implements these hooks through `AuthenticatedFiles`, now
-selected by normal Session lock-provider startup in this candidate. Other
-role transports still require integration; this is not a live-install claim.
+The lock, output, WM and shell transports implement these hooks through
+`AuthenticatedFiles`, selected by their normal authenticated startup paths.
+Legacy fixture entry points remain explicit; an authentication failure on a
+required path must never select them.
 
 ### Atomic lock-root publication
 
@@ -166,10 +187,10 @@ provisioned channel. The lock SDK accepts its admitted root without another
 Tversion or ordinary attach, then performs its normal file bootstrap. The SDK
 case reaches the lock object and observes revocation; the raw-wire case retains
 the exact waiting-read check.
-Other roles, in-place fragment controls, external client rollout and final
-acceptance remain open. The lock-file
-contract specifies the same admission path; SDK contract copies are verified
-byte-for-byte against both documents.
+The investigation separately records revocation between upload fragments,
+the other role owners and independent client joins. Final acceptance and SDK
+snapshot alignment must be checked against the final candidate. The lock-file
+contract specifies the same admission path.
 
 ### Session coordinator
 
@@ -292,7 +313,9 @@ response. Offsets do not select fragments. A short read receives `EINVAL` and
 keeps the response; a read with no response receives `ENOMSG`. Until the response
 is consumed, another write receives `EAGAIN` before applying a command. Unknown
 versions/kinds, truncation and trailing bytes are `EINVAL`. No record exceeds
-84 bytes. No nonce or response body is logged.
+556 bytes. The original commands and responses retain their encodings and
+84-byte maximum; the recipe registration command below extends only the private
+owner interface. No nonce or response body is logged.
 
 All numbers are little-endian. Every record starts with version `u32 = 1` and
 kind `u32`. An **identity** is `(principal u64, namespace u64, launch u64)`.
@@ -309,6 +332,23 @@ wire_generation u64, attempt_generation u64, afid u32)`.
 | 6 Relay | launch u64, nonce [32] | Check Session-attested registration, active state and audience; consume nonce and queue verdict; Done. |
 | 7 Take | attempt | Return Pending or consume its exact Verified result. |
 | 8 Cancel | attempt | Cancel only the exact attempt/result; Done. |
+| 9 ReserveAudiences | identity, primary_audience u64, count u32, audiences[count] u64 | Reserve one launch with an immutable approved audience set; Done. |
+
+Kind 9 has 1–64 strictly increasing, nonzero audiences, including the primary
+audience. Duplicate, unordered, empty or oversized sets refuse. Only trusted
+Session recipe policy selects the set. Kind 2 still registers exactly one
+audience; it never means all roles. Re-registering the same launch cannot extend
+its set. An older Factotum refuses the new command rather than silently reducing
+or widening policy.
+
+The same launch capability can authenticate separate connections to approved
+endpoints. Each attempt still names one exact audience, server, connection and
+afid; all successful endpoints pin the same launch identity. Session checks
+membership independently and narrows each worker to a single audience. Role
+permissions remain separate export policy: an audience set does not grant
+operations merely by authenticating. Existing launch, principal, attempt and
+transport quotas are unchanged. Abandoned kind-9 registrations use the same
+Retire cleanup as kind 2; closure or retirement invalidates the whole set.
 
 | Response kind | Body |
 | --- | --- |
@@ -529,7 +569,9 @@ pipeline's fid bound). Separate supervisor tests exercise pending-login progress
 owner drop, bounded results and replacement with scripted agents. The concrete
 Session adapter compiles with `native-session`; an actual PAM process/physical
 lock run is not claimed. The protected lock join is separate evidence. Remaining
-role and independent Rust client exchanges are required before t317 can close.
+candidate-wide gates and contract reconciliation are required before t317 can
+close; later role and independent Rust client joins are recorded separately
+in the qualification investigation.
 
 ## Provisioned relay and bounded verification ingress
 

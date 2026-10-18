@@ -55,7 +55,7 @@ with tempfile.TemporaryDirectory(prefix='bemenu-executable-') as directory:
                 connection.close()
                 raise AssertionError('invalid launch descriptor reached the role socket')
 
-    for mode in ('reopen', 'wrong_revision', 'startup_timeout'):
+    for mode in ('reopen', 'image_upload', 'wrong_revision', 'startup_timeout'):
         path = str(Path(directory) / (mode + '.sock'))
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
             listener.bind(path)
@@ -63,6 +63,7 @@ with tempfile.TemporaryDirectory(prefix='bemenu-executable-') as directory:
             listener.settimeout(15)
             child = subprocess.Popen([binary, '--serve'], env=dict(env, SOPHIA_SHELL_9P_SOCKET=path),
                                      stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            peer = None
             try:
                 with listener.accept()[0] as socket_peer:
                     socket_peer.settimeout(10)
@@ -73,7 +74,8 @@ with tempfile.TemporaryDirectory(prefix='bemenu-executable-') as directory:
                         stdout, stderr = child.communicate(timeout=8)
                         assert child.returncode == 1 and b'status=failed' in stderr
                     else:
-                        peer = Peer(socket_peer, root, wrong_revision=mode == 'wrong_revision')
+                        peer = Peer(socket_peer, root, wrong_revision=mode == 'wrong_revision',
+                                    upload=mode == 'image_upload')
                         deadline = time.monotonic() + 15
                         try:
                             while not peer.finished:
@@ -83,6 +85,10 @@ with tempfile.TemporaryDirectory(prefix='bemenu-executable-') as directory:
                             assert mode == 'wrong_revision'
                         if mode == 'reopen':
                             assert peer.allocations == 2
+                            assert peer.image_ready
+                        if mode == 'image_upload':
+                            assert peer.source_received
+                        if mode in ('reopen', 'image_upload'):
                             child.terminate()
                         stdout, stderr = child.communicate(timeout=5)
                         if mode == 'wrong_revision':
@@ -90,10 +96,12 @@ with tempfile.TemporaryDirectory(prefix='bemenu-executable-') as directory:
                             assert b'status=negotiated' not in stderr
                         else:
                             assert child.returncode == 0, stderr
-                            assert stderr.count(b'status=negotiated revision=7 epoch=11 wire=9p') == 1
+                            assert stderr.count(b'status=negotiated revision=9 epoch=11 wire=9p') == 1
                             assert b'status=failed' not in stderr
                     assert not stdout
             finally:
+                if peer is not None:
+                    peer.close()
                 if child.poll() is None:
                     child.kill()
                     child.communicate(timeout=5)

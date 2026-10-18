@@ -74,15 +74,16 @@ static int serve_files(struct bm_menu *menu, const char *path)
             result = 1; break;
         }
         if (state.native && !announced) {
-            fprintf(stderr,"bemenu_native status=negotiated revision=7 epoch=%llu wire=9p\n",
+            fprintf(stderr,"bemenu_native status=negotiated revision=9 epoch=%llu wire=9p\n",
                     (unsigned long long)state.connection_epoch);
             announced = true;
         }
-        struct pollfd pollers[2];
+        struct pollfd pollers[3];
         int timeout;
         if (bm_sophia_files_poll(client.files,now,&pollers[0],&timeout) < 0) {result = 1; break;}
         bm_sophia_files_relay_poll(client.files,&pollers[1]);
-        int ready = poll(pollers,2,timeout);
+        bm_sophia_files_image_poll(client.files,&pollers[2]);
+        int ready = poll(pollers,3,timeout);
         if (ready < 0 && errno != EINTR) {result = 1; break;}
         revents = ready > 0 ? pollers[0].revents : 0;
     }

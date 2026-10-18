@@ -75,25 +75,9 @@ allocation(struct bm_sophia_files *f, const struct sophia_ns_event *e)
 static int
 resource(struct bm_sophia_files *f, const struct sophia_ns_event *e)
 {
-    const struct sophia_sf_resource_status *v = &e->record->value.resource_status;
-    struct bm_sophia_files_view *view = bm_sophia_files_view_find(f, v->resource_id);
-    if (e->current && view && v->resource_generation == 1) {
-        if (v->status == 1 && view->state == BM_SOPHIA_FILES_VIEW_BEGUN) {
-            view->state = BM_SOPHIA_FILES_VIEW_SENDING;
-        } else if (v->status == 2 && view->state == BM_SOPHIA_FILES_VIEW_ENDED) {
-            view->state = BM_SOPHIA_FILES_VIEW_ACCEPTED;
-            f->upload = -1;
-        } else if (v->status != 1 && v->status != 2) {
-            /* Rejected or expired: the SDK freed it; so is our copy once the
-             * session no longer borrows a chunk of it. */
-            if (f->upload == view - f->views)
-                f->upload = -1;
-            view->state = BM_SOPHIA_FILES_VIEW_FREE;
-            bm_sophia_files_release_copy(f);
-        } else {
-            return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_UPLOAD, SOPHIA_9P_INVALID);
-        }
-    }
+    (void)e;
+    /* The image producer has verified the status, but only SourceReleased
+     * settles custody. Consume this head so that later release can arrive. */
     return done(f);
 }
 

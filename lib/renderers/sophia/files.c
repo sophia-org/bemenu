@@ -6,9 +6,9 @@
 #include <fcntl.h>
 #include <limits.h>
 
-/* The native launcher role: revision 7, bits 5, 7, 8 and 11 exactly. */
+/* Native launcher authority plus the required sealed-image grant. */
 static const struct sophia_ss_config session_config = {
-    {7, 7, 0x9a0}, SOPHIA_SF_LAUNCHER, 8192, 8, 65536, NULL, 0,
+    {9, 9, 0x29a0}, SOPHIA_SF_LAUNCHER, 8192, 8, 65536, NULL, 0,
 };
 static const struct sophia_ns_config native_config = {1, BM_SOPHIA_FILES_MARGIN_MS};
 
@@ -151,6 +151,7 @@ bm_sophia_files_new(struct bm_menu *menu, const char *endpoint, uint64_t now_ms,
         return SOPHIA_9P_BUSY;
     f->menu = menu;
     f->fd = -1;
+    f->image_dir = f->source_fd = -1;
     f->relay_fd = -1;
     f->connection.fd = -1;
     f->upload = f->pending = f->shown = -1;
@@ -212,7 +213,8 @@ guards(struct bm_sophia_files *f)
     const struct bm_sophia_files_view *up = f->upload >= 0 ? &f->views[f->upload] : NULL;
     uint64_t retiring = retiring_key(f);
     uint64_t frame = f->pending >= 0 ? f->present_ticket : f->demand_ticket;
-    if (guard(f, BM_SOPHIA_FILES_GUARD_BOOT, !f->native, 0) ||
+    bool image_ready = f->image_enabled && sophia_ip_channel(&f->image.producer) == SOPHIA_IPC_READY;
+    if (guard(f, BM_SOPHIA_FILES_GUARD_BOOT, !f->native || !image_ready, 0) ||
         guard(f, BM_SOPHIA_FILES_GUARD_OBJECT, f->fetching, f->fetch_kind ^ (f->fetch_generation << 3)) ||
         guard(f, BM_SOPHIA_FILES_GUARD_ALLOCATION, o.allocation_due_ms != 0, f->allocation_ticket) ||
         guard(f, BM_SOPHIA_FILES_GUARD_UPLOAD, up != NULL, up ? up->id : 0) ||
@@ -235,6 +237,28 @@ bootstrap(struct bm_sophia_files *f)
         return 0;
     if (r)
         return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_NATIVE, r);
+    char directory[sizeof(f->endpoint)];
+    memcpy(directory, f->endpoint, sizeof(directory));
+    char *slash = strrchr(directory, '/');
+    slash[slash == directory ? 1 : 0] = 0;
+    f->image_dir = open(directory, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+    if (f->image_dir < 0)
+        return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_NATIVE, SOPHIA_9P_IO);
+    const struct sophia_sf_limits *l = sophia_ss_limits(&f->ss);
+    struct sophia_ss_image_config image = {0};
+    image.endpoint_dir = f->image_dir;
+    image.formats = f->image_formats;
+    image.formats_capacity = sizeof(f->image_formats);
+    image.producer.bounds.max_resource_bytes = l->max_resource_bytes;
+    image.producer.bounds.max_width = l->max_width_px;
+    image.producer.bounds.max_height = l->max_height_px;
+    image.producer.bounds.max_outputs = l->max_outputs;
+    image.producer.bounds.transfer_slots = l->max_open_transfers;
+    image.producer.transfer_timeout_ms = l->transfer_timeout_ms;
+    image.producer.startup_deadline_ms = later(f->now, BM_SOPHIA_FILES_GUARD_MS);
+    if (sophia_ss_image_init(&f->image, &image) || sophia_ss_image_attach(&f->ss, &f->image))
+        return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_NATIVE, SOPHIA_9P_INVALID);
+    f->image_enabled = true;
     f->native = true;
     return 0;
 }
@@ -271,6 +295,14 @@ bm_sophia_files_progress(struct bm_sophia_files *f, short revents, uint64_t now_
                                     BM_SOPHIA_FILES_STAGE_NEGOTIATE, r);
     if ((r = bootstrap(f)))
         return r;
+    if (f->image_enabled) {
+        struct pollfd image;
+        bm_sophia_files_image_poll(f, &image);
+        if (image.fd >= 0 && poll(&image, 1, 0) > 0)
+            (void)sophia_ss_image_dispatch(&f->image, image.revents, now_ms);
+        if (f->image.started && sophia_ip_path(&f->image.producer) == SOPHIA_IPP_ERROR)
+            return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_UPLOAD, SOPHIA_9P_IO);
+    }
     if (f->native) {
         r = sophia_ns_service(&f->ns, now_ms);
         if (r)
@@ -325,6 +357,11 @@ bm_sophia_files_poll(const struct bm_sophia_files *f, uint64_t now_ms, struct po
     int retry = sophia_ss_timeout(&f->ss, now_ms);
     if (retry >= 0)
         *timeout_ms = smaller(*timeout_ms, (uint64_t)retry);
+    if (f->image_enabled) {
+        int64_t due = sophia_ss_image_timeout(&f->image, now_ms);
+        if (due >= 0)
+            *timeout_ms = smaller(*timeout_ms, (uint64_t)due);
+    }
     /* Only FUTURE lifecycle deadlines wake the loop. A past advisory permit
      * bound, like any past informational deadline, allows no local action:
      * the server's own record ends it, so it must not become a zero wait. */
@@ -345,6 +382,15 @@ bm_sophia_files_poll(const struct bm_sophia_files *f, uint64_t now_ms, struct po
         *timeout_ms = smaller(*timeout_ms, due > now_ms ? due - now_ms : 0);
     }
     return 0;
+}
+
+void
+bm_sophia_files_image_poll(const struct bm_sophia_files *f, struct pollfd *poller)
+{
+    *poller = (struct pollfd){-1, 0, 0};
+    if (f && f->image_enabled && !f->terminal)
+        *poller = (struct pollfd){sophia_ss_image_poll_fd(&f->image),
+                                 sophia_ss_image_poll_events(&f->image), 0};
 }
 
 void
@@ -402,7 +448,17 @@ bm_sophia_files_dispose(struct bm_sophia_files *f)
     bm_sophia_raster_free(f->raster);
     /* No replacement of an externally modified menu; never free foreign items. */
     bm_sophia_catalog_clear(&f->model);
-    free(f->copy);
+    if (f->source_fd >= 0)
+        close(f->source_fd);
+    if (f->image_enabled && f->image.started) {
+        sophia_ip_journal_lost(&f->image.producer);
+        unsigned cursor = 0;
+        struct sophia_ip_offer_info offer;
+        while (sophia_ip_offer_next(&f->image.producer, &cursor, &offer))
+            (void)sophia_ip_forget(&f->image.producer, offer.offer);
+    }
+    if (f->image_dir >= 0)
+        close(f->image_dir);
     free(f->storage);
     free(f->objects);
     free(f);

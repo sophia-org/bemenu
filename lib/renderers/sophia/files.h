@@ -46,6 +46,7 @@ int bm_sophia_files_poll(const struct bm_sophia_files *files, uint64_t now_ms,
                          struct pollfd *poller, int *timeout_ms);
 /* Poll alongside the role fd during authentication; fd -1 otherwise. */
 void bm_sophia_files_relay_poll(const struct bm_sophia_files *files, struct pollfd *poller);
+void bm_sophia_files_image_poll(const struct bm_sophia_files *files, struct pollfd *poller);
 /* One bounded serialized pass with CLOCK_MONOTONIC milliseconds: at most 64 KiB
  * each way, 16 events and one resource or frame step of each kind. 0 while
  * live; a terminal result latches and every later call returns it. Timeouts are

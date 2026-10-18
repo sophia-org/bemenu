@@ -8,6 +8,7 @@
 #include "internal.h"
 #include "renderers/sophia/files.h"
 #include "renderers/sophia/raster.h"
+#include "../../vendor/sophia-desktop-sdk/source/src/sophia_image_channel.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -36,6 +37,8 @@ unsigned peer_chunks(void);
 size_t peer_chunk_size(unsigned i);
 uint64_t peer_ticket(uint16_t kind);
 const uint8_t *peer_uploaded(size_t *bytes);
+uint64_t peer_image_offer(void);
+void peer_image_release(void);
 
 #define EPOCH 17u
 #define CONTENT 3u
@@ -207,7 +210,7 @@ resource_status(uint64_t id, uint16_t status)
     struct sophia_sf_record r;
     memset(&r, 0, sizeof(r));
     r.header.kind = SOPHIA_SF_RESOURCE_STATUS;
-    r.value.resource_status = (struct sophia_sf_resource_status){62, EPOCH, CONTENT, id, 1, status,
+    r.value.resource_status = (struct sophia_sf_resource_status){peer_image_offer(), EPOCH, CONTENT, id, 1, status,
                                                                  (uint16_t)(status > 2 ? 3 : 0), 0, 0};
     peer_push(r);
 }
@@ -389,26 +392,22 @@ published_catalog(struct ctx *c)
     assert(count == 4 && peer_fetches(SOPHIA_SF_CATALOG) == 1 && peer_fetches(SOPHIA_SF_OUTPUTS) == 1);
 }
 
-/* Upload the next view: returns its begin record, after Accepted. */
+/* Settle the next ISB; Accepted alone must never permit a frame demand. */
 static struct sophia_sf_resource_begin
 uploaded(struct ctx *c)
 {
-    unsigned ends = peer_count(SOPHIA_SF_RESOURCE_END);
-    const struct sophia_sf_record *begin = peer_last(SOPHIA_SF_RESOURCE_BEGIN);
+    unsigned demands = peer_count(SOPHIA_SF_FRAME_DEMAND);
+    const struct sophia_sf_record *begin = peer_last(SOPHIA_IC_IMAGE_BEGIN);
     assert(begin);
     struct sophia_sf_resource_begin v = begin->value.resource_begin;
-    resource_status(v.resource_id, 1);
-    for (unsigned i = 0; i < 400 && peer_count(SOPHIA_SF_RESOURCE_END) == ends; ++i)
-        pass(c, 1);
-    assert(peer_count(SOPHIA_SF_RESOURCE_END) == ends + 1);
-    /* Canonical chunks: whole row groups, the last one the remainder. */
-    size_t rows = upload_chunk_limit / ((size_t)v.width_px * 4), chunk = rows * v.width_px * 4, bytes;
-    assert(peer_chunks() == v.chunk_count && v.chunk_count == (v.height_px + rows - 1) / rows);
-    for (unsigned i = 0; i + 1 < peer_chunks(); ++i)
-        assert(peer_chunk_size(i) == chunk);
+    size_t bytes;
     (void)peer_uploaded(&bytes);
     assert(bytes == v.total_bytes);
     resource_status(v.resource_id, 2);
+    pass(c, 2);
+    assert(peer_count(SOPHIA_SF_FRAME_DEMAND) == demands);
+    assert(!peer_count(SOPHIA_SF_RESOURCE_BEGIN) && !peer_count(SOPHIA_SF_RESOURCE_END));
+    peer_image_release();
     pass(c, 2);
     return v;
 }
@@ -468,7 +467,7 @@ launcher(struct ctx *c, struct sophia_sf_resource_begin *first)
            request->value.native_allocation_request.desired_height == 320);
     allocation_result(request->value.native_allocation_request.request_id, SCALE_GEN);
     pass(c, 2);
-    const struct sophia_sf_record *begin = peer_last(SOPHIA_SF_RESOURCE_BEGIN);
+    const struct sophia_sf_record *begin = peer_last(SOPHIA_IC_IMAGE_BEGIN);
     assert(begin && begin->value.resource_begin.width_px == 640 && begin->value.resource_begin.height_px == 320 &&
            begin->value.resource_begin.pixel_format == 1 && begin->value.resource_begin.total_bytes == 640u * 320u * 4u &&
            begin->value.resource_begin.rendered_scale_numerator == 1 &&
@@ -514,7 +513,7 @@ test_lifecycle(void)
     assert(bm_sophia_files_inspect(c.f, &s) && s.edits == 1 && s.revision == 2);
     assert(ack && ack->value.native_input_ack.event_id == 10 && ack->value.native_input_ack.disposition == 1);
     assert(!strcmp(bm_menu_get_filter(c.menu), "Fil"));
-    assert(peer_last(SOPHIA_SF_RESOURCE_BEGIN)->value.resource_begin.resource_id == first.resource_id + 1);
+    assert(peer_last(SOPHIA_IC_IMAGE_BEGIN)->value.resource_begin.resource_id == first.resource_id + 1);
     second = uploaded(&c);
     same_pixels(c.menu, &second, true);
     candidate = presented(&c, 2, 2);

@@ -12,18 +12,6 @@ bm_sophia_files_view_find(struct bm_sophia_files *f, uint64_t id)
     return NULL;
 }
 
-/* Chunk storage is borrowed until the session is ready again or no longer
- * uploading; only then does the owned copy go. */
-void
-bm_sophia_files_release_copy(struct bm_sophia_files *f)
-{
-    if (!f->copy || (sophia_ss_upload_pending(&f->ss) && !sophia_ss_upload_ready(&f->ss)))
-        return;
-    free(f->copy);
-    f->copy = NULL;
-    f->copy_bytes = f->copy_sent = f->chunk_bytes = 0;
-}
-
 static bool
 refused(const struct bm_sophia_files *f, uint64_t ticket)
 {
@@ -46,7 +34,7 @@ bm_sophia_files_settle(struct bm_sophia_files *f)
         return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_INPUT, SOPHIA_9P_INVALID);
     for (unsigned i = 0; i < BM_SOPHIA_FILES_VIEWS; ++i) {
         const struct bm_sophia_files_view *v = &f->views[i];
-        if ((v->state == BM_SOPHIA_FILES_VIEW_BEGUN || v->state == BM_SOPHIA_FILES_VIEW_ENDED ||
+        if ((v->state == BM_SOPHIA_FILES_VIEW_OFFERED ||
              v->state == BM_SOPHIA_FILES_VIEW_RETIRING) && refused(f, v->ticket))
             return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_UPLOAD, SOPHIA_9P_INVALID);
     }
@@ -211,8 +199,8 @@ stage(struct bm_sophia_files *f, const struct sophia_ns_obligations *o)
         f->raster_id != a->allocation_id || f->raster_generation != a->allocation_generation ||
         f->model.generation != open->catalog_generation)
         return 0;
-    bm_sophia_files_release_copy(f);
-    if (f->copy || sophia_ss_upload_pending(&f->ss))
+    if (f->source_fd >= 0 || !f->image_enabled ||
+        sophia_ip_channel(&f->image.producer) != SOPHIA_IPC_READY)
         return 0;
     int slot = -1;
     unsigned live = 0;
@@ -233,24 +221,21 @@ stage(struct bm_sophia_files *f, const struct sophia_ns_obligations *o)
     if (!bm_sophia_view_capture(f->raster, &f->model, &view))
         return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_RENDER, SOPHIA_9P_INVALID);
     size_t row = (size_t)view.width * 4, bytes = row * view.height;
-    /* The SDK has validated Limits. File uploads use the chunk budget;
-     * socket envelope sizes do not determine a resource's row groups. */
-    size_t rows = l->max_chunk_bytes / row;
     if (view.stride != row || view.row_count > l->max_candidate_targets || view.row_count > SOPHIA_NS_ROWS ||
-        bytes > l->max_resource_bytes || !rows)
+        bytes > l->max_resource_bytes)
         return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_RENDER, SOPHIA_9P_INVALID);
-    f->copy = malloc(bytes);
-    if (!f->copy)
-        return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_RENDER, SOPHIA_9P_BUSY);
-    memcpy(f->copy, view.data, bytes);
+    void *pixels;
+    size_t mapped;
+    if (sophia_ip_isb_create(view.width, view.height, &f->source_fd, &pixels, &mapped))
+        return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_RENDER, SOPHIA_9P_IO);
+    memcpy(pixels, view.data, bytes);
+    if (sophia_ip_isb_finish(f->source_fd, pixels, mapped))
+        return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_RENDER, SOPHIA_9P_IO);
     view.data = NULL;
-    f->copy_bytes = bytes;
-    f->copy_sent = 0;
-    f->chunk_bytes = rows * row;
     f->displayed = view.row_count + 1; /* Upstream count includes the filter row. */
     uint32_t common = divisor(f->raster_numerator, f->raster_denominator);
     f->views[slot] = (struct bm_sophia_files_view){
-        BM_SOPHIA_FILES_VIEW_STAGED, f->next_resource++, 0, open->opening, sophia_ns_revision(&f->ns),
+        BM_SOPHIA_FILES_VIEW_STAGED, f->next_resource++, 0, 0, open->opening, sophia_ns_revision(&f->ns),
         f->model.generation, f->outputs.facts_generation, a->allocation_id, a->allocation_generation,
         f->raster_numerator / common, f->raster_denominator / common, view,
     };
@@ -258,57 +243,57 @@ stage(struct bm_sophia_files *f, const struct sophia_ns_obligations *o)
     return 0;
 }
 
-/* Begin, canonical chunks, End. A chunk's short writes are the session's:
- * it advances by each positive Rwrite count and is ready again only once the
- * whole chunk is written. A failed transfer ends in the resource's status. */
+/* Busy retains the same sealed source. Accepted alone is not settlement. */
 static int
 upload(struct bm_sophia_files *f)
 {
     if (f->upload < 0)
         return 0;
     struct bm_sophia_files_view *v = &f->views[f->upload];
-    uint64_t ticket;
     int r;
     if (v->state == BM_SOPHIA_FILES_VIEW_STAGED) {
-        struct sophia_sf_resource_begin begin = {
-            .resource_id = v->id, .resource_generation = 1, .width_px = v->view.width,
-            .height_px = v->view.height, .rendered_scale_numerator = v->scale_numerator,
-            .rendered_scale_denominator = v->scale_denominator, .pixel_format = 1,
-            .chunk_count = (uint32_t)((f->copy_bytes + f->chunk_bytes - 1) / f->chunk_bytes),
-            .total_bytes = f->copy_bytes,
+        struct sophia_ic_metadata image = {
+            .resource_id = v->id, .resource_generation = 1,
+            .admission_epoch = sophia_ss_limits(&f->ss)->grant_content_epoch,
+            .output = f->allocation_fact.output_id, .allocation = v->allocation_id,
+            .topology_generation = v->facts_generation,
+            .source_kind = SOPHIA_IC_SOURCE_SEALED,
+            .source_format = SOPHIA_IC_SEALED_BGRA8_PREMULTIPLIED,
+            .width = v->view.width, .height = v->view.height, .stride = v->view.width * 4,
+            .plane_count = 1, .descriptor_count = 1,
+            .logical_bytes = (uint64_t)v->view.width * v->view.height * 4,
         };
-        r = sophia_ns_upload_begin(&f->ns, begin, &ticket);
-        if (r == SOPHIA_9P_BUSY)
+        r = sophia_ss_image_begin(&f->image, &image, f->source_fd, f->now, &v->offer, &v->ticket);
+        if (r == SOPHIA_IPR_BUSY)
             return 0;
         if (r)
             return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_UPLOAD, r);
-        v->ticket = ticket;
-        v->state = BM_SOPHIA_FILES_VIEW_BEGUN;
+        f->source_fd = -1;
+        v->state = BM_SOPHIA_FILES_VIEW_OFFERED;
         return 0;
     }
-    if (v->state != BM_SOPHIA_FILES_VIEW_SENDING || !sophia_ss_upload_ready(&f->ss))
+    struct sophia_ip_offer_info info;
+    if (sophia_ip_offer(&f->image.producer, v->offer, &info))
+        return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_UPLOAD, SOPHIA_9P_INVALID);
+    if (info.state == SOPHIA_IPO_UNKNOWN || info.state == SOPHIA_IPO_AMBIGUOUS ||
+        info.state == SOPHIA_IPO_REFUSED || info.deadline_passed)
+        return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_UPLOAD, SOPHIA_9P_IO);
+    if (info.state != SOPHIA_IPO_SETTLED)
         return 0;
-    if (f->copy_sent < f->copy_bytes) {
-        size_t n = f->copy_bytes - f->copy_sent;
-        if (n > f->chunk_bytes)
-            n = f->chunk_bytes;
-        r = sophia_ss_upload_chunk(&f->ss, f->copy + f->copy_sent, n);
-        if (r == SOPHIA_9P_BUSY)
-            return 0;
-        if (r)
-            return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_UPLOAD, r);
-        f->copy_sent += n;
+    if (info.status != SOPHIA_IPS_ACCEPTED || info.disposition != SOPHIA_IC_RETAINED) {
+        if (sophia_ip_forget(&f->image.producer, v->offer))
+            return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_UPLOAD, SOPHIA_9P_INVALID);
+        v->state = BM_SOPHIA_FILES_VIEW_FREE;
+        f->upload = -1;
         return 0;
     }
-    /* Ready with every byte written: no chunk is borrowed any more. */
-    bm_sophia_files_release_copy(f);
-    r = sophia_ns_upload_end(&f->ns, &ticket);
+    r = sophia_ns_adopt_image(&f->ns, &f->image, v->offer);
     if (r == SOPHIA_9P_BUSY)
         return 0;
     if (r)
         return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_UPLOAD, r);
-    v->ticket = ticket;
-    v->state = BM_SOPHIA_FILES_VIEW_ENDED;
+    v->state = BM_SOPHIA_FILES_VIEW_ACCEPTED;
+    f->upload = -1;
     return 0;
 }
 

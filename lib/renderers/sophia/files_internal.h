@@ -5,6 +5,7 @@
 #include "../../../vendor/sophia-desktop-sdk/source/src/sophia_desktop_connection.h"
 #include <sys/un.h>
 #include "../../../vendor/sophia-desktop-sdk/source/src/sophia_launch_auth.h"
+#include "../../../vendor/sophia-desktop-sdk/source/src/sophia_shell_image.h"
 
 #define BM_SOPHIA_FILES_GUARD_MS UINT64_C(5000)
 #define BM_SOPHIA_FILES_BYTES 65536u
@@ -15,13 +16,13 @@
 /* Local bookkeeping of one immutable upload, mirrored only from this client's
  * own calls, delivered events and ticket outcomes. The SDK keeps authority. */
 enum bm_sophia_files_view_state {
-    BM_SOPHIA_FILES_VIEW_FREE, BM_SOPHIA_FILES_VIEW_STAGED, BM_SOPHIA_FILES_VIEW_BEGUN,
-    BM_SOPHIA_FILES_VIEW_SENDING, BM_SOPHIA_FILES_VIEW_ENDED, BM_SOPHIA_FILES_VIEW_ACCEPTED,
+    BM_SOPHIA_FILES_VIEW_FREE, BM_SOPHIA_FILES_VIEW_STAGED, BM_SOPHIA_FILES_VIEW_OFFERED,
+    BM_SOPHIA_FILES_VIEW_ACCEPTED,
     BM_SOPHIA_FILES_VIEW_RETIRING
 };
 struct bm_sophia_files_view {
     enum bm_sophia_files_view_state state;
-    uint64_t id, ticket;
+    uint64_t id, ticket, offer;
     uint64_t opening, revision, catalog_generation, facts_generation;
     uint64_t allocation_id, allocation_generation;
     uint32_t scale_numerator, scale_denominator;
@@ -57,6 +58,10 @@ struct bm_sophia_files {
     uint64_t now, retry_at;
     struct sophia_ss ss;
     struct sophia_ns ns;
+    struct sophia_ss_image image;
+    bool image_enabled;
+    int image_dir, source_fd;
+    uint8_t image_formats[65536];
     void *storage, *objects;
     size_t storage_bytes;
     /* Objects: announcements are consumed at once; one fetch at a time. */
@@ -72,10 +77,8 @@ struct bm_sophia_files {
     struct bm_sophia_raster *raster;
     uint64_t raster_id, raster_generation;
     uint32_t raster_numerator, raster_denominator;
-    /* Uploads: one owned immutable copy, canonical chunks handed to the ss. */
+    /* One sealed source retained across local Busy until the SDK takes it. */
     struct bm_sophia_files_view views[BM_SOPHIA_FILES_VIEWS];
-    unsigned char *copy;
-    size_t copy_bytes, copy_sent, chunk_bytes;
     int upload, pending, shown;
     uint64_t next_resource, target_generation;
     /* Frame: known waits from delivered events, never inferred from INVALID. */
@@ -100,5 +103,4 @@ int bm_sophia_files_schedule(struct bm_sophia_files *f);
 /* Allocation grant: local geometry check and raster for its pixels. */
 int bm_sophia_files_granted(struct bm_sophia_files *f, const struct sophia_sf_allocation_result *a);
 struct bm_sophia_files_view *bm_sophia_files_view_find(struct bm_sophia_files *f, uint64_t id);
-void bm_sophia_files_release_copy(struct bm_sophia_files *f);
 #endif

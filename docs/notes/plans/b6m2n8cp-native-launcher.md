@@ -382,3 +382,25 @@ dynamic candidate hashes and executable path/hash. Its manifest SHA-256 is
 The first two runs stopped at the old expected revision and file count;
 both were corrected to the verified snapshot, and the final gate passed.
 No binary was copied into evidence.
+
+### Immutable Shared Buffers, 2026-10-18
+
+The launcher requires shell r9 and the sealed-image grant. It copies each
+painted view into a sealed memfd, retains that source across Busy, and waits
+for Accepted plus SourceReleased(Retained). The SDK then atomically adopts the
+resource into the native lifecycle; frame demand, retirement and Released
+continue through that owner. Admission uses the content grant epoch. Missing
+readiness, transfer timeout or channel loss fails without a byte fallback.
+Menu/filtering and Cairo raster ownership remain unchanged.
+
+The signed C SDK snapshot is `a1c41aa0217037b0578f6606f589ed9846ee9247`
+(346 exact files). Its immutable layout belongs to the SDK; Bemenu's source
+ceiling covers its maintained adapter and tests. The full device-hidden
+`make check-sophia EXTRA_WARNINGS=-Werror` passes. Unit controls verify no
+frame demand before source settlement and no byte Begin/End. The independent
+executable peer checks r9 negotiation, actual SCM_RIGHTS transfer, all four
+seals, exact geometry/length and premultiplied pixels, then observes demand.
+The reopening, wrong-revision and startup-timeout controls still pass.
+Evidence: `~/.local/state/sophia/development-evidence/isb-client-migration-20261018/bemenu-isb-08.log`.
+This is supplied-peer CPU/transport evidence, not native presentation or
+physical acceptance. Nothing was installed.
