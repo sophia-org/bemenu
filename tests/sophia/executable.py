@@ -96,7 +96,7 @@ with tempfile.TemporaryDirectory(prefix='bemenu-executable-') as directory:
                             assert b'status=negotiated' not in stderr
                         else:
                             assert child.returncode == 0, stderr
-                            assert stderr.count(b'status=negotiated revision=9 epoch=11 wire=9p') == 1
+                            assert stderr.count(b'status=negotiated revision=10 epoch=11 wire=9p') == 1
                             assert b'status=failed' not in stderr
                     assert not stdout
             finally:

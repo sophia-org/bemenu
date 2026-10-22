@@ -63,6 +63,9 @@ class Peer:
         self.upload = upload
         self.image_ready = self.source_received = False
         self.image_metadata = None
+        self.ring_identity = None
+        self.ring_fd = None
+        self.ring_extent = 0
         self.fids = {}
         self.qids = {name: i + 1 for i, name in enumerate(
             ('', 'api', 'transaction', 'transaction-reuse', 'submit', 'ack', 'events', 'limits', 'catalog', 'outputs'))}
@@ -87,7 +90,7 @@ class Peer:
         endpoint = Path(self.image_path).name
         self.objects['image-channel'] = (
             'sophia-image-channel version=1\nrole=1\nconnection_epoch=11\nchannel_generation=1\n'
-            f'endpoint={endpoint}\nsource_kinds=1\nmax_packet_bytes=200\nmax_fds=4\nmax_offers=1\n'
+            f'endpoint={endpoint}\nsource_kinds=4\nmax_packet_bytes=200\nmax_fds=4\nmax_offers=1\n'
             'max_packets_per_turn=8\nhello_timeout_ms=500\nvalidation_timeout_ms=100\n'
             'validation_chunk_bytes=65536\ncapture_interest_timeout_ms=200\nformats_generation=1\n'
             'limits_generation=1\n').encode()
@@ -95,10 +98,19 @@ class Peer:
             '6Q12IQ', 1, 1, 1048576, 1048576, 0, 0,
             0, 1, 1, 0, 1, 1, 1024, 1024, 100, 200, 65536, 8, 0))
         self.objects['image-formats'] = record(0x7006, pack('3QII', 1, 1, 1, 0, 0))
-        for name in ('image-channel', 'image-limits', 'image-formats'):
+        for name in ('image-channel', 'image-limits', 'image-formats', 'owned-ring-v1'):
             self.qids[name] = len(self.qids) + 1
 
+    def ring_event(self, kind, offer=0, slot=0, slot_generation=0, resource=0,
+                   generation=0, reason=0, changed=0):
+        self.sequence += 1
+        words = (kind, *self.ring_identity, self.sequence, offer, slot,
+                 slot_generation, resource, generation, reason, changed)
+        self.journal.extend(pack('I4s', 120, b'D4E1') + pack('14Q', *words))
+
     def close(self):
+        if self.ring_fd is not None:
+            os.close(self.ring_fd)
         if self.image is not None:
             self.image.close()
         self.image_listener.close()
@@ -138,9 +150,9 @@ class Peer:
         self.accepted = self.sequence
         body = self.staged[32:]
         if kind == 256:
-            assert unpack('HH4xQ', body) == (9, 9, 0x29a0)
-            self.event(16, pack('HHQQHHHHI', 7 if self.wrong_revision else 9, 0,
-                                EPOCH, 0x29a0, 16, 128, 16, 1, 0))
+            assert unpack('HH4xQ', body) == (10, 10, 0x89a0)
+            self.event(16, pack('HHQQHHHHI', 7 if self.wrong_revision else 10, 0,
+                                EPOCH, 0x89a0, 16, 128, 16, 1, 0))
             if not self.wrong_revision:
                 self.publish(3, 9, 'catalog')
                 self.publish(2, 3, 'outputs')
@@ -190,26 +202,23 @@ class Peer:
             if not self.image_ready:
                 assert not ancillary and packet == pack('IHHHHI3Q', 40, 1, 1, 1, 0, 0, EPOCH, 1, 0)
                 self.image_ready = True
-                self.event(0x7003, pack('QII', 1, 1, 0))
+                self.event(0x7003, pack('QII', 1, 4, 0))
             else:
-                assert self.upload and self.image_metadata is not None
-                offer, resource, generation = unpack('3Q', self.image_metadata)
-                assert len(packet) == 200 and packet[40:136] == self.image_metadata
-                assert packet[:40] == pack('IHHHHI3Q', 200, 1, 2, 1, 1, 0, EPOCH, 1, offer)
+                # D4F1 source packet: the registration words plus one ring fd.
+                assert self.ring_identity is not None and len(packet) == 72
+                assert packet[:8] == pack('I4s', 72, b'D4F1')
+                words = unpack('8Q', packet, 8)
+                assert words[0] == 1 and words[1:6] == self.ring_identity
+                slots, capacity = words[6], words[7]
+                assert 1 <= slots <= 4 and capacity and capacity % 4 == 0
+                self.ring_extent = 4096 + (capacity + 4095) // 4096 * 4096
                 assert len(ancillary) == 1 and ancillary[0][:2] == (sockets.SOL_SOCKET, sockets.SCM_RIGHTS)
                 fds = array.array('i', ancillary[0][2])
                 assert len(fds) == 1
-                try:
-                    assert fcntl.fcntl(fds[0], fcntl.F_GET_SEALS) & 15 == 15
-                    assert os.fstat(fds[0]).st_size == 819200
-                    pixels = os.pread(fds[0], 819200, 0)
-                    assert len(set(pixels)) > 1
-                    assert all(max(pixels[i:i+3]) <= pixels[i+3] for i in range(0, len(pixels), 4))
-                finally:
-                    os.close(fds[0])
+                self.ring_fd = fds[0]
+                assert os.fstat(self.ring_fd).st_size == self.ring_extent * slots
                 self.source_received = True
-                self.event(33, pack('5QHHIQ', offer, EPOCH, CONTENT, resource, generation, 2, 0, 0, 819200))
-                self.event(0x7002, pack('3QII', offer, resource, generation, 1, 0))
+                self.ring_event(2)
             self.events()
             return
         size, kind, tag = unpack('IBH', exact(self.socket, 7))
@@ -264,6 +273,33 @@ class Peer:
             elif name == 'submit':
                 assert offset == 0 and count == 24
                 self.submit(value)
+            elif name == 'owned-ring-v1':
+                assert offset == 0
+                if count == 72:
+                    assert value[:8] == pack('I4s', 72, b'D4C1')
+                    words = unpack('8Q', value, 8)
+                    assert words[0] == 1 and words[1:4] == (EPOCH, CONTENT, 1)
+                    self.ring_identity = words[1:6]
+                    self.ring_event(1)
+                else:
+                    assert count == 152 and value[:8] == pack('I4s', 152, b'D4C1')
+                    words = unpack('18Q', value, 8)
+                    assert words[0] == 2 and words[1:6] == self.ring_identity
+                    offer, slot, slot_generation = words[6], words[7], words[8]
+                    resource, generation = words[9], words[10]
+                    width, height = words[16], words[17]
+                    assert self.ring_fd is not None and generation == 1
+                    pixels = os.pread(self.ring_fd,
+                                      width * height * 4,
+                                      slot * self.ring_extent + 4096)
+                    assert len(set(pixels)) > 1
+                    assert all(max(pixels[i:i+3]) <= pixels[i+3]
+                               for i in range(0, len(pixels), 4))
+                    self.event(33, pack('5QHHIQ', offer, EPOCH, CONTENT,
+                                        resource, generation, 2, 0, 0,
+                                        width * height * 4))
+                    self.ring_event(4, offer, slot, slot_generation,
+                                    resource, generation)
             else:
                 assert name == 'ack' and count == 16
                 epoch, self.acked = unpack('QQ', value)

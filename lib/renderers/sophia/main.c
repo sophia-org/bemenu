@@ -74,7 +74,7 @@ static int serve_files(struct bm_menu *menu, const char *path)
             result = 1; break;
         }
         if (state.native && !announced) {
-            fprintf(stderr,"bemenu_native status=negotiated revision=9 epoch=%llu wire=9p\n",
+            fprintf(stderr,"bemenu_native status=negotiated revision=10 epoch=%llu wire=9p\n",
                     (unsigned long long)state.connection_epoch);
             announced = true;
         }

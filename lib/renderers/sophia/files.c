@@ -6,9 +6,10 @@
 #include <fcntl.h>
 #include <limits.h>
 
-/* Native launcher authority plus the required sealed-image grant. */
+/* Native launcher authority plus the required owned-ring grant (r10). */
 static const struct sophia_ss_config session_config = {
-    {9, 9, 0x29a0}, SOPHIA_SF_LAUNCHER, 8192, 8, 65536, NULL, 0,
+    {SOPHIA_SF_REVISION_OWNED_RING, SOPHIA_SF_REVISION_OWNED_RING, 0x89a0},
+    SOPHIA_SF_LAUNCHER, 8192, 8, 65536, NULL, 0,
 };
 static const struct sophia_ns_config native_config = {1, BM_SOPHIA_FILES_MARGIN_MS};
 
@@ -151,7 +152,7 @@ bm_sophia_files_new(struct bm_menu *menu, const char *endpoint, uint64_t now_ms,
         return SOPHIA_9P_BUSY;
     f->menu = menu;
     f->fd = -1;
-    f->image_dir = f->source_fd = -1;
+    f->image_dir = -1;
     f->relay_fd = -1;
     f->connection.fd = -1;
     f->upload = f->pending = f->shown = -1;
@@ -448,14 +449,12 @@ bm_sophia_files_dispose(struct bm_sophia_files *f)
     bm_sophia_raster_free(f->raster);
     /* No replacement of an externally modified menu; never free foreign items. */
     bm_sophia_catalog_clear(&f->model);
-    if (f->source_fd >= 0)
-        close(f->source_fd);
     if (f->image_enabled && f->image.started) {
-        sophia_ip_journal_lost(&f->image.producer);
         unsigned cursor = 0;
-        struct sophia_ip_offer_info offer;
-        while (sophia_ip_offer_next(&f->image.producer, &cursor, &offer))
-            (void)sophia_ip_forget(&f->image.producer, offer.offer);
+        struct sophia_ss_ring_offer_info offer;
+        while (sophia_ss_image_ring_next(&f->image, &cursor, &offer))
+            (void)sophia_ss_image_ring_forget(&f->image, offer.offer.offer);
+        sophia_ss_image_close(&f->image);
     }
     if (f->image_dir >= 0)
         close(f->image_dir);

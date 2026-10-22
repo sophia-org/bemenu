@@ -56,7 +56,8 @@ static struct {
     size_t chunk_size, chunk_sent, write_step, received, chunk_sizes[64];
     uint8_t *uploaded;
     struct sophia_ss_image *image;
-    uint64_t image_offer;
+    uint64_t image_offer, ring_serial;
+    int ring_released;
 } P;
 
 static size_t
@@ -201,8 +202,8 @@ sophia_ss_open_fd(struct sophia_ss *s, int fd, const struct sophia_ss_config *c,
 {
     (void)s;
     assert(fd >= 0 && storage && bytes == 64 && c->profile == SOPHIA_SF_LAUNCHER);
-    assert(c->offer.minimum_revision == 9 && c->offer.maximum_revision == 9 &&
-           c->offer.required_capabilities == 0x29a0 && c->object_storage &&
+    assert(c->offer.minimum_revision == 10 && c->offer.maximum_revision == 10 &&
+           c->offer.required_capabilities == 0x89a0 && c->object_storage &&
            c->object_capacity == SOPHIA_SF_MAX_RECORD);
     P.fd = fd;
     s->files.profile = SOPHIA_SF_LAUNCHER;
@@ -544,16 +545,96 @@ int sophia_ss_image_begin(struct sophia_ss_image *image, struct sophia_ic_metada
     return 0;
 }
 uint64_t peer_image_offer(void) {return P.image_offer;}
-void peer_image_release(void)
+void peer_image_release(void) {P.ring_released = 1;}
+
+/* Supplied owned-ring surface (r10): one slot, scripted release. Defining
+ * every ring symbol keeps the SDK's shell_session objects unlinked, as
+ * with the rest of this fixture; the real sophia_ns adoption runs on top. */
+static struct sophia_ss_ring_image ring_image;
+int ss_ring_mode(const struct sophia_ss_image *image) {(void)image; return 1;}
+enum sophia_ss_ring_state sophia_ss_image_ring_state(const struct sophia_ss_image *image,
+                                                     uint16_t *reason)
 {
-    struct sophia_ip_offer_info info;
-    struct sophia_ic_record record = {0};
-    assert(!sophia_ip_offer(&P.image->producer, P.image_offer, &info));
-    record.header.kind = SOPHIA_IC_SOURCE_RELEASED;
-    record.header.epoch = P.epoch;
-    record.value.released.offer = info.offer;
-    record.value.released.resource_id = info.resource_id;
-    record.value.released.resource_generation = info.resource_generation;
-    record.value.released.disposition = SOPHIA_IC_RETAINED;
-    assert(!sophia_ip_record(&P.image->producer, &record, P.image->producer.last_now));
+    (void)image;
+    if (reason)
+        *reason = 0;
+    return SOPHIA_SS_RING_READY;
 }
+uint64_t sophia_ss_image_ring_capacity(const struct sophia_ss_image *image, uint32_t *slots)
+{
+    (void)image;
+    if (slots)
+        *slots = 1;
+    return PEER_UPLOAD;
+}
+void *sophia_ss_image_ring_pixels(struct sophia_ss_image *image, uint32_t slot)
+{
+    (void)image;
+    return slot == 0 && !P.image_offer ? P.uploaded : NULL;
+}
+int sophia_ss_image_ring_offer(struct sophia_ss_image *image, uint32_t slot,
+                               const struct sophia_ss_ring_image *m, uint64_t now,
+                               uint64_t *offer)
+{
+    (void)image; (void)now;
+    assert(slot == 0 && !P.image_offer && m->width && m->height);
+    ring_image = *m;
+    *offer = P.image_offer = ++P.ring_serial;
+    P.received = (size_t)m->width * m->height * 4;
+    assert(P.received <= PEER_UPLOAD);
+    /* A test-local geometry summary, not a byte-upload wire record. */
+    struct sophia_sf_record summary = {0};
+    summary.header.kind = SOPHIA_IC_IMAGE_BEGIN;
+    summary.value.resource_begin = (struct sophia_sf_resource_begin){
+        .transaction = *offer, .resource_id = m->resource_id,
+        .resource_generation = m->resource_generation,
+        .width_px = m->width, .height_px = m->height, .total_bytes = P.received,
+        .pixel_format = 1, .rendered_scale_numerator = 1, .rendered_scale_denominator = 1,
+    };
+    (void)peer_log_record(&summary);
+    return 0;
+}
+int sophia_ss_image_ring_info(const struct sophia_ss_image *image, uint64_t offer,
+                              struct sophia_ss_ring_offer_info *info)
+{
+    (void)image;
+    if (!offer || offer != P.image_offer)
+        return SOPHIA_9P_INVALID;
+    memset(info, 0, sizeof(*info));
+    info->offer.identity.connection_epoch = P.epoch;
+    info->offer.identity.content_epoch = P.limits.grant_content_epoch;
+    info->offer.offer = offer;
+    info->offer.slot_generation = 2 * offer;
+    info->offer.resource_id = ring_image.resource_id;
+    info->offer.resource_generation = ring_image.resource_generation;
+    info->offer.allocation_id = ring_image.allocation_id;
+    info->offer.allocation_generation = ring_image.allocation_generation;
+    info->offer.output_id = ring_image.output_id;
+    info->offer.output_generation = ring_image.output_generation;
+    info->offer.topology_generation = ring_image.topology_generation;
+    info->offer.width = ring_image.width;
+    info->offer.height = ring_image.height;
+    info->state = P.ring_released ? SOPHIA_SS_SLOT_RELEASED : SOPHIA_SS_SLOT_OFFERED;
+    info->status = P.ring_released ? SOPHIA_IPS_ACCEPTED : 0;
+    info->adoptable = P.ring_released;
+    return 0;
+}
+int sophia_ss_image_ring_forget(struct sophia_ss_image *image, uint64_t offer)
+{
+    (void)image;
+    if (!offer || offer != P.image_offer)
+        return SOPHIA_9P_INVALID;
+    P.image_offer = 0;
+    P.ring_released = 0;
+    return 0;
+}
+int sophia_ss_image_ring_next(const struct sophia_ss_image *image, unsigned *cursor,
+                              struct sophia_ss_ring_offer_info *info)
+{
+    (void)image;
+    if (*cursor || !P.image_offer)
+        return 0;
+    *cursor = 1;
+    return sophia_ss_image_ring_info(image, P.image_offer, info) == 0;
+}
+void sophia_ss_image_close(struct sophia_ss_image *image) {(void)image;}

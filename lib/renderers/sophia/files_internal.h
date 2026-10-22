@@ -60,7 +60,7 @@ struct bm_sophia_files {
     struct sophia_ns ns;
     struct sophia_ss_image image;
     bool image_enabled;
-    int image_dir, source_fd;
+    int image_dir;
     uint8_t image_formats[65536];
     void *storage, *objects;
     size_t storage_bytes;
@@ -77,7 +77,7 @@ struct bm_sophia_files {
     struct bm_sophia_raster *raster;
     uint64_t raster_id, raster_generation;
     uint32_t raster_numerator, raster_denominator;
-    /* One sealed source retained across local Busy until the SDK takes it. */
+    /* One ring offer in flight; its slot is SDK custody until release. */
     struct bm_sophia_files_view views[BM_SOPHIA_FILES_VIEWS];
     int upload, pending, shown;
     uint64_t next_resource, target_generation;

@@ -187,8 +187,9 @@ divisor(uint32_t a, uint32_t b)
     return a;
 }
 
-/* Paint the current menu once through the unchanged view/raster path and
- * keep one immutable copy: later paints never alter bytes being uploaded. */
+/* Paint the current menu once through the unchanged view/raster path
+ * into a free ring slot: later paints use other slots or wait, and the
+ * SDK never touches an offered slot until its exact release. */
 static int
 stage(struct bm_sophia_files *f, const struct sophia_ns_obligations *o)
 {
@@ -199,8 +200,12 @@ stage(struct bm_sophia_files *f, const struct sophia_ns_obligations *o)
         f->raster_id != a->allocation_id || f->raster_generation != a->allocation_generation ||
         f->model.generation != open->catalog_generation)
         return 0;
-    if (f->source_fd >= 0 || !f->image_enabled ||
-        sophia_ip_channel(&f->image.producer) != SOPHIA_IPC_READY)
+    if (!f->image_enabled || sophia_ip_channel(&f->image.producer) != SOPHIA_IPC_READY)
+        return 0;
+    enum sophia_ss_ring_state ring = sophia_ss_image_ring_state(&f->image, NULL);
+    if (ring == SOPHIA_SS_RING_REFUSED || ring == SOPHIA_SS_RING_FAILED)
+        return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_UPLOAD, SOPHIA_9P_IO);
+    if (ring != SOPHIA_SS_RING_READY)
         return 0;
     int slot = -1;
     unsigned live = 0;
@@ -224,18 +229,38 @@ stage(struct bm_sophia_files *f, const struct sophia_ns_obligations *o)
     if (view.stride != row || view.row_count > l->max_candidate_targets || view.row_count > SOPHIA_NS_ROWS ||
         bytes > l->max_resource_bytes)
         return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_RENDER, SOPHIA_9P_INVALID);
-    void *pixels;
-    size_t mapped;
-    if (sophia_ip_isb_create(view.width, view.height, &f->source_fd, &pixels, &mapped))
-        return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_RENDER, SOPHIA_9P_IO);
+    uint32_t slots = 0;
+    uint64_t capacity = sophia_ss_image_ring_capacity(&f->image, &slots);
+    if (!slots || bytes > capacity)
+        return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_RENDER, SOPHIA_9P_INVALID);
+    void *pixels = NULL;
+    uint32_t ring_slot = 0;
+    for (uint32_t i = 0; i < slots && !pixels; ++i)
+        if ((pixels = sophia_ss_image_ring_pixels(&f->image, i)))
+            ring_slot = i;
+    if (!pixels)
+        return 0; /* Every slot is still in flight; a release reopens one. */
     memcpy(pixels, view.data, bytes);
-    if (sophia_ip_isb_finish(f->source_fd, pixels, mapped))
-        return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_RENDER, SOPHIA_9P_IO);
     view.data = NULL;
+    uint64_t resource = f->next_resource++;
+    struct sophia_ss_ring_image image = {
+        .resource_id = resource, .resource_generation = 1,
+        .allocation_id = a->allocation_id, .allocation_generation = a->allocation_generation,
+        .output_id = f->allocation_fact.output_id,
+        .output_generation = f->allocation_fact.output_generation,
+        .topology_generation = f->outputs.facts_generation,
+        .width = view.width, .height = view.height,
+    };
+    uint64_t offer = 0;
+    int r = sophia_ss_image_ring_offer(&f->image, ring_slot, &image, f->now, &offer);
+    if (r == SOPHIA_IPR_AGAIN)
+        return 0; /* The slot stays FREE; the identical offer is retried. */
+    if (r)
+        return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_UPLOAD, r);
     f->displayed = view.row_count + 1; /* Upstream count includes the filter row. */
     uint32_t common = divisor(f->raster_numerator, f->raster_denominator);
     f->views[slot] = (struct bm_sophia_files_view){
-        BM_SOPHIA_FILES_VIEW_STAGED, f->next_resource++, 0, 0, open->opening, sophia_ns_revision(&f->ns),
+        BM_SOPHIA_FILES_VIEW_OFFERED, resource, 0, offer, open->opening, sophia_ns_revision(&f->ns),
         f->model.generation, f->outputs.facts_generation, a->allocation_id, a->allocation_generation,
         f->raster_numerator / common, f->raster_denominator / common, view,
     };
@@ -243,51 +268,30 @@ stage(struct bm_sophia_files *f, const struct sophia_ns_obligations *o)
     return 0;
 }
 
-/* Busy retains the same sealed source. Accepted alone is not settlement. */
+/* An Accepted status alone is not settlement: only the exact
+ * SlotReleased makes an offer adoptable, and adoption frees the slot. */
 static int
 upload(struct bm_sophia_files *f)
 {
     if (f->upload < 0)
         return 0;
     struct bm_sophia_files_view *v = &f->views[f->upload];
-    int r;
-    if (v->state == BM_SOPHIA_FILES_VIEW_STAGED) {
-        struct sophia_ic_metadata image = {
-            .resource_id = v->id, .resource_generation = 1,
-            .admission_epoch = sophia_ss_limits(&f->ss)->grant_content_epoch,
-            .output = f->allocation_fact.output_id, .allocation = v->allocation_id,
-            .topology_generation = v->facts_generation,
-            .source_kind = SOPHIA_IC_SOURCE_SEALED,
-            .source_format = SOPHIA_IC_SEALED_BGRA8_PREMULTIPLIED,
-            .width = v->view.width, .height = v->view.height, .stride = v->view.width * 4,
-            .plane_count = 1, .descriptor_count = 1,
-            .logical_bytes = (uint64_t)v->view.width * v->view.height * 4,
-        };
-        r = sophia_ss_image_begin(&f->image, &image, f->source_fd, f->now, &v->offer, &v->ticket);
-        if (r == SOPHIA_IPR_BUSY)
-            return 0;
-        if (r)
-            return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_UPLOAD, r);
-        f->source_fd = -1;
-        v->state = BM_SOPHIA_FILES_VIEW_OFFERED;
-        return 0;
-    }
-    struct sophia_ip_offer_info info;
-    if (sophia_ip_offer(&f->image.producer, v->offer, &info))
+    struct sophia_ss_ring_offer_info info;
+    if (sophia_ss_image_ring_info(&f->image, v->offer, &info))
         return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_UPLOAD, SOPHIA_9P_INVALID);
-    if (info.state == SOPHIA_IPO_UNKNOWN || info.state == SOPHIA_IPO_AMBIGUOUS ||
-        info.state == SOPHIA_IPO_REFUSED || info.deadline_passed)
+    if (info.state == SOPHIA_SS_SLOT_UNKNOWN || info.state == SOPHIA_SS_SLOT_REFUSED ||
+        info.deadline_passed)
         return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_UPLOAD, SOPHIA_9P_IO);
-    if (info.state != SOPHIA_IPO_SETTLED)
+    if (info.state != SOPHIA_SS_SLOT_RELEASED)
         return 0;
-    if (info.status != SOPHIA_IPS_ACCEPTED || info.disposition != SOPHIA_IC_RETAINED) {
-        if (sophia_ip_forget(&f->image.producer, v->offer))
+    if (!info.adoptable) {
+        if (sophia_ss_image_ring_forget(&f->image, v->offer))
             return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_UPLOAD, SOPHIA_9P_INVALID);
         v->state = BM_SOPHIA_FILES_VIEW_FREE;
         f->upload = -1;
         return 0;
     }
-    r = sophia_ns_adopt_image(&f->ns, &f->image, v->offer);
+    int r = sophia_ns_adopt_image(&f->ns, &f->image, v->offer);
     if (r == SOPHIA_9P_BUSY)
         return 0;
     if (r)
