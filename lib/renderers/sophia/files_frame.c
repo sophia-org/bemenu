@@ -254,7 +254,7 @@ stage(struct bm_sophia_files *f, const struct sophia_ns_obligations *o)
     uint64_t offer = 0;
     int r = sophia_ss_image_ring_offer(&f->image, ring_slot, &image, f->now, &offer);
     if (r == SOPHIA_IPR_AGAIN)
-        return 0; /* The slot stays FREE; the identical offer is retried. */
+        return 0; /* The slot stays FREE; a later pass retries. */
     if (r)
         return bm_sophia_files_fail(f, BM_SOPHIA_FILES_STAGE_UPLOAD, r);
     f->displayed = view.row_count + 1; /* Upstream count includes the filter row. */
